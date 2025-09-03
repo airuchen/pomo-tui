@@ -25,6 +25,13 @@
 * Show current time.
 * Show hint of how to use the pomodoro.
 
+#### Task Logging [Optional]
+* The pomodoro stores/pipes the current state, allowing waybar to parse the state
+* The completed log will sotre in a logging file
+    - Session <num> : <task name>
+        - start time / break / resume
+        - completed time
+
 #### Server [Optional]
 * The pomodoro can run as a server in the backgroud.
 * A user can request the current status of the pomodoro.
@@ -41,10 +48,24 @@
 * Time: chrono
 
 ## TODOs
-- [ ] Main features
-    - [ ] Basic counter
-    - [ ] Strat/Stop/Resume
-    - [ ] State Transition
+- [x] Main features
+    - [x] Basic counter
+    - [x] Strat/Stop/Resume
+    - [x] State Transition
+    - [ ] [Optional] Buffer time (5s) before entering the next state
+- [ ] Task Logging
+    - [ ] Current task
+    - [ ] Task logging
+    - [ ] Serialization
+    - [ ] Pomo state Pipe to waybar
 - [ ] TUI
-- [ ] Server
-
+    - [x] ASCII number
+    - [ ] Hint
+    - [ ] Adjust Font size
+- [ ] Clean code
+    - [ ] Renaming
+    - [ ] Logic cleanup in POMO
+        - [ ] Do I need all the member variable to track the state/duration/preset?
+- [ ] Sharing
+    - [ ] Learning in general
+    - [ ] Learning in Rust

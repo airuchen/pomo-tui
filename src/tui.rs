@@ -121,6 +121,8 @@ impl Widget for &App {
         let state_info = Line::from(vec![
             Span::raw(self.timer.get_state().to_string()),
             Span::raw(" "),
+            Span::raw(self.timer.get_current_task().to_string()),
+            Span::raw(" "),
             Span::raw(Local::now().format("%H:%M").to_string()),
         ]);
 

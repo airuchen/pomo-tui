@@ -90,6 +90,7 @@ pub struct Timer {
     durs: Durations,
     paused: bool,
     auto_continue: bool,
+    current_task: String,
 }
 
 impl Timer {
@@ -104,6 +105,7 @@ impl Timer {
             durs: durs,
             paused: false,
             auto_continue: true,
+            current_task: String::new(),
         }
     }
 
@@ -136,9 +138,6 @@ impl Timer {
     pub fn switch_mode(&mut self) {
         self.state = self.state.toggle();
         self.reset();
-        if (self.auto_continue) {
-            self.start();
-        }
     }
 
     pub fn is_running(&self) -> bool {
@@ -168,15 +167,22 @@ impl Timer {
     }
 
     pub fn update(&mut self) {
-        if let Some(t0) = self.started_at.as_ref() {
-            if self.remaining < t0.elapsed() {
-                self.switch_mode();
+        if let Some(t0) = self.started_at.as_ref()
+            && self.remaining < t0.elapsed()
+        {
+            self.switch_mode();
+            if (self.auto_continue) {
+                self.start();
             }
         }
     }
 
     pub fn get_state(&self) -> TimerState {
         self.state
+    }
+
+    pub fn get_current_task(&self) -> &str {
+        &self.current_task
     }
 
     pub fn set_preset(&mut self, p: Preset) {
