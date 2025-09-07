@@ -1,3 +1,6 @@
+use chrono::{DateTime, Local};
+use serde::Serialize;
+use std::collections::VecDeque;
 use std::fmt;
 use std::time::{Duration, Instant};
 
@@ -11,15 +14,49 @@ pub enum Preset {
     Test,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub enum TimerState {
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+pub enum TimerEvent {
+    #[default]
+    Idle,
+    Started {
+        timer_type: TimerType,
+        task: String,
+        at: DateTime<Local>,
+    },
+    Paused {
+        task: String,
+        at: DateTime<Local>,
+    },
+    Resumed {
+        task: String,
+        at: DateTime<Local>,
+    },
+    Tick {
+        task: String,
+        at: DateTime<Local>,
+        remaining_secs: u64,
+    },
+    Terminated {
+        task: String,
+        at: DateTime<Local>,
+        work_secs: Duration,
+    },
+    Completed {
+        task: String,
+        at: DateTime<Local>,
+        work_secs: Duration,
+    },
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize)]
+pub enum TimerType {
     // NOTE: pub so that we can use it outside of timer.rs module
     #[default]
     Work,
     Break,
 }
 
-impl TimerState {
+impl TimerType {
     pub const fn toggle(self) -> Self {
         match self {
             Self::Work => Self::Break,
@@ -35,11 +72,11 @@ impl TimerState {
     }
 }
 
-impl fmt::Display for TimerState {
+impl fmt::Display for TimerType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TimerState::Work => f.write_str("Work"),
-            TimerState::Break => f.write_str("Break"),
+            TimerType::Work => f.write_str("Work"),
+            TimerType::Break => f.write_str("Break"),
         }
     }
 }
@@ -85,17 +122,19 @@ impl Default for Durations {
 pub struct Timer {
     started_at: Option<Instant>,
     remaining: Duration,
-    state: TimerState,
+    state: TimerType, // TODO: rename, maybe mode?
     timeset: Preset,
     durs: Durations,
     paused: bool,
     auto_continue: bool,
+    task_name: String,
+    events: VecDeque<TimerEvent>,
 }
 
 impl Timer {
     pub fn new() -> Self {
         let durs = Durations::default();
-        let state = TimerState::Work;
+        let state = TimerType::Work;
         Self {
             started_at: None,
             remaining: state.duration(&durs),
@@ -104,33 +143,60 @@ impl Timer {
             durs: durs,
             paused: false,
             auto_continue: true,
+            task_name: String::new(),
+            events: VecDeque::new(),
         }
     }
 
-    pub fn start(&mut self) -> bool {
+    // TODO: what does inline do here?
+    #[inline]
+    fn emit(&mut self, event: TimerEvent) {
+        self.events.push_back(event);
+    }
+
+    // TODO: how is this done?
+    pub fn drain_events(&mut self) -> impl Iterator<Item = TimerEvent> {
+        std::mem::take(&mut self.events).into_iter()
+    }
+
+    fn start(&mut self) {
         if self.started_at.is_none() {
             self.started_at = Some(Instant::now());
-            return true;
         }
-        false
     }
 
-    pub fn stop(&mut self) -> bool {
+    fn stop(&mut self) {
         if let Some(t0) = self.started_at.take() {
             // TODO: check what take() does
             self.remaining -= t0.elapsed();
-            return true;
         }
-        false
     }
 
-    pub fn toggle(&mut self) -> bool {
-        if self.is_running() {
-            self.paused = self.stop();
-            return self.paused;
+    pub fn toggle(&mut self) {
+        if !self.is_running() && !self.paused {
+            self.emit(TimerEvent::Started {
+                timer_type: self.state,
+                task: self.task_name.clone(),
+                at: Local::now(),
+            });
+            self.start();
+            return;
         }
-        self.paused = !self.start();
-        self.paused
+
+        if self.is_running() {
+            self.stop();
+            self.emit(TimerEvent::Paused {
+                task: self.task_name.clone(),
+                at: Local::now(),
+            });
+        } else {
+            self.start();
+            self.emit(TimerEvent::Resumed {
+                task: self.task_name.clone(),
+                at: Local::now(),
+            });
+        }
+        self.paused = !self.paused;
     }
 
     pub fn switch_mode(&mut self) {
@@ -168,15 +234,30 @@ impl Timer {
         if let Some(t0) = self.started_at.as_ref()
             && self.remaining < t0.elapsed()
         {
+            self.emit(TimerEvent::Completed {
+                task: self.task_name.clone(),
+                at: Local::now(),
+                work_secs: self.state.duration(&self.durs),
+            });
             self.switch_mode();
             if self.auto_continue {
-                self.start();
+                self.toggle();
             }
         }
     }
 
-    pub fn get_state(&self) -> TimerState {
-        self.state
+    // maybe return a struct with all the info needed?
+    // TODO: should I always return ref?
+    pub fn get_state(&self) -> &TimerType {
+        &self.state
+    }
+
+    pub fn get_task_name(&self) -> &str {
+        &self.task_name
+    }
+
+    pub fn set_task_name(&mut self, new_task_name: &str) {
+        self.task_name = new_task_name.into();
     }
 
     pub fn set_preset(&mut self, p: Preset) {
@@ -189,22 +270,31 @@ impl Timer {
         self.timeset = p;
         self.reset();
     }
+
+    // TODO: is it possible the gather the emit logic to one function?
+    pub fn persist_termination(&mut self) {
+        self.emit(TimerEvent::Terminated {
+            task: self.task_name.clone(),
+            at: Local::now(),
+            work_secs: (self.state.duration(&self.durs) - self.get_remaining()),
+        });
+    }
 }
 
 #[test]
 fn init_timer_state() {
     let t = Timer::new();
-    assert_eq!(t.state, TimerState::Work);
+    assert_eq!(t.state, TimerType::Work);
     assert_eq!(t.remaining, Duration::from_secs(25 * MIN));
     assert_eq!(t.durs, Durations::default());
 }
 
 #[test]
 fn timer_state_toggle() {
-    let mut ts = TimerState::default();
-    assert_eq!(ts, TimerState::Work);
+    let mut ts = TimerType::default();
+    assert_eq!(ts, TimerType::Work);
     ts = ts.toggle();
-    assert_eq!(ts, TimerState::Break);
+    assert_eq!(ts, TimerType::Break);
     ts = ts.toggle();
-    assert_eq!(ts, TimerState::Work);
+    assert_eq!(ts, TimerType::Work);
 }

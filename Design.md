@@ -54,8 +54,19 @@
     - [x] State Transition
     - [ ] [Optional] Buffer time (5s) before entering the next state
 - [ ] Task Logging
-    - [ ] Current task
+    - [x] Set/Show the current task
     - [ ] Task logging
+        - [ ] Log into a file
+        - [ ] Log with proper serialization structure
+            ```yaml
+            Session: <task name>
+              - start time / pause / resume
+              - break / completed time
+            ```
+        - [ ] track with uuid so that name doesn't matter.
+        - [ ] if the task name change, the logged task name needs to be updated
+        - [ ] We should log the current task and the break time before exit the program.
+        - [ ] [Optional] statistic mode to visualize chart
     - [ ] Serialization
     - [ ] Pomo state Pipe to waybar
 - [ ] TUI

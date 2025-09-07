@@ -12,7 +12,7 @@ use ratatui::{
 use std::fmt;
 use std::io;
 
-use crate::{timer::TimerState, utils};
+use crate::{logging::append_event, timer::TimerType, utils};
 use crate::{
     timer::{Preset, Timer},
     utils::create_large_ascii_numbers,
@@ -49,8 +49,6 @@ pub struct TaskInput {
     input: String,
     /// Position of cursor in the editor area.
     character_index: usize,
-    /// Task name
-    pub task: String,
 }
 
 impl TaskInput {
@@ -58,7 +56,6 @@ impl TaskInput {
         Self {
             input: String::new(),
             character_index: 0,
-            task: String::new(),
         }
     }
 
@@ -120,10 +117,11 @@ impl TaskInput {
         self.character_index = 0;
     }
 
-    fn confirm_task(&mut self) {
-        self.task = self.input.clone();
+    fn confirm_task(&mut self) -> String {
+        let task = self.input.clone();
         self.input.clear();
         self.reset_cursor();
+        task
     }
 
     fn break_input(&mut self) {
@@ -152,13 +150,27 @@ impl App {
     /// runs the application's main loop until the user quits
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
-            terminal.draw(|frame| self.draw(frame))?;
+            // 1) Update the timer
             self.timer.update();
 
-            // Check for events with a timeout to allow timer update
+            // 2) Check for input events
             if event::poll(std::time::Duration::from_millis(100))? {
                 self.handle_events()?;
             }
+
+            // 3) drain and persist events
+            for event in self.timer.drain_events() {
+                let _ = append_event("history.json", &event)?;
+            }
+
+            // 4) Render TUI
+            terminal.draw(|frame| self.draw(frame))?;
+        }
+
+        // Persist data before exit
+        self.timer.persist_termination();
+        for event in self.timer.drain_events() {
+            let _ = append_event("history.json", &event)?;
         }
         Ok(())
     }
@@ -186,7 +198,7 @@ impl App {
                 KeyCode::Char(' ') => self.toggle(),
                 KeyCode::Char('s') => self.switch_mode(),
                 KeyCode::Char('r') => self.reset(),
-                KeyCode::Char('t') => {
+                KeyCode::Char('i') => {
                     self.app_mode = self.app_mode.toggle();
                 }
                 KeyCode::Char('+') => {
@@ -203,7 +215,7 @@ impl App {
             },
             AppMode::Input if key_event.kind == KeyEventKind::Press => match key_event.code {
                 KeyCode::Enter => {
-                    self.task_input.confirm_task();
+                    self.timer.set_task_name(&self.task_input.confirm_task());
                     self.app_mode = AppMode::Normal;
                 }
                 KeyCode::Char(to_insert) => self.task_input.enter_char(to_insert),
@@ -252,8 +264,8 @@ impl Widget for &App {
         // TODO: still don't get what <'static> do...
         let render_color = match (self.timer.get_state(), self.timer.is_paused()) {
             (_, true) => Color::DarkGray,
-            (TimerState::Work, _) => Color::Yellow,
-            (TimerState::Break, _) => Color::Green,
+            (TimerType::Work, _) => Color::Yellow,
+            (TimerType::Break, _) => Color::Green,
         };
         let remaining_time = utils::fmt_duration(self.timer.get_remaining());
         let mut text: Vec<Line<'static>> =
@@ -275,7 +287,7 @@ impl Widget for &App {
                     Style::default().fg(Color::Yellow),
                 ),
             ]),
-            AppMode::Normal => Line::from(vec![Span::raw(self.task_input.task.to_string())]),
+            AppMode::Normal => Line::from(vec![Span::raw(self.timer.get_task_name().to_string())]),
         };
         text.push(task_info);
 

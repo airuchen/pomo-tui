@@ -1,6 +1,7 @@
 mod timer;
 mod tui;
 mod utils;
+mod logging;
 
 use std::io;
 use tui::App;
