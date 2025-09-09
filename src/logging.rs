@@ -1,9 +1,9 @@
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 
-use crate::timer::TimerEvent;
+use crate::timer::LogEvent;
 
-pub fn append_event(path: &str, event: &TimerEvent) -> std::io::Result<()> {
+pub fn append_event(path: &str, event: &LogEvent) -> std::io::Result<()> {
     let mut f = OpenOptions::new().create(true).append(true).open(path)?;
     let mut w = BufWriter::new(f);
 

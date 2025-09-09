@@ -56,17 +56,14 @@
 - [ ] Task Logging
     - [x] Set/Show the current task
     - [ ] Task logging
-        - [ ] Log into a file
-        - [ ] Log with proper serialization structure
-            ```yaml
-            Session: <task name>
-              - start time / pause / resume
-              - break / completed time
-            ```
+        - [x] Log into a file
         - [ ] track with uuid so that name doesn't matter.
-        - [ ] if the task name change, the logged task name needs to be updated
-        - [ ] We should log the current task and the break time before exit the program.
+        - [x] if the task name change, the logged task name needs to be updated
+        - [x] We should log the current task and the break time before exit the program.
         - [ ] [Optional] statistic mode to visualize chart
+        - [ ]
+
+        ~~- [ ] Log with proper serialization structure~~
     - [ ] Serialization
     - [ ] Pomo state Pipe to waybar
 - [ ] TUI
@@ -77,6 +74,7 @@
     - [ ] Renaming
     - [ ] Logic cleanup in POMO
         - [ ] Do I need all the member variable to track the state/duration/preset?
+    - [ ] Can I wrap up exposed element to a strct?
 - [ ] Sharing
     - [ ] Learning in general
     - [ ] Learning in Rust

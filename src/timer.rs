@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::VecDeque;
 use std::fmt;
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 const MIN: u64 = 60;
 
@@ -14,34 +15,36 @@ pub enum Preset {
     Test,
 }
 
+// 
+
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub enum TimerEvent {
+pub enum LogEvent {
     #[default]
     Idle,
     Started {
+        id: Uuid,
         timer_type: TimerType,
         task: String,
         at: DateTime<Local>,
     },
     Paused {
+        id: Uuid,
         task: String,
         at: DateTime<Local>,
     },
     Resumed {
+        id: Uuid,
         task: String,
         at: DateTime<Local>,
-    },
-    Tick {
-        task: String,
-        at: DateTime<Local>,
-        remaining_secs: u64,
     },
     Terminated {
+        id: Uuid,
         task: String,
         at: DateTime<Local>,
         work_secs: Duration,
     },
     Completed {
+        id: Uuid,
         task: String,
         at: DateTime<Local>,
         work_secs: Duration,
@@ -118,6 +121,8 @@ impl Default for Durations {
     }
 }
 
+// TODO: maybe a session struct for a session name, id, time...
+
 #[derive(Debug, Default, Clone)]
 pub struct Timer {
     started_at: Option<Instant>,
@@ -126,9 +131,11 @@ pub struct Timer {
     timeset: Preset,
     durs: Durations,
     paused: bool,
+    idle: bool,
     auto_continue: bool,
     task_name: String,
-    events: VecDeque<TimerEvent>,
+    id: Option<Uuid>,
+    events: VecDeque<LogEvent>,
 }
 
 impl Timer {
@@ -142,30 +149,52 @@ impl Timer {
             timeset: Preset::default(),
             durs: durs,
             paused: false,
+            idle: true,
             auto_continue: true,
             task_name: String::new(),
+            id: None,
             events: VecDeque::new(),
         }
     }
 
     // TODO: what does inline do here?
     #[inline]
-    fn emit(&mut self, event: TimerEvent) {
+    fn emit(&mut self, event: LogEvent) {
         self.events.push_back(event);
     }
 
     // TODO: how is this done?
-    pub fn drain_events(&mut self) -> impl Iterator<Item = TimerEvent> {
+    pub fn drain_events(&mut self) -> impl Iterator<Item = LogEvent> {
         std::mem::take(&mut self.events).into_iter()
     }
 
     fn start(&mut self) {
-        if self.started_at.is_none() {
-            self.started_at = Some(Instant::now());
-        }
+        self.idle = false;
+        self.started_at = Some(Instant::now());
+        self.id = Some(Uuid::new_v4());
+        self.emit(LogEvent::Started {
+            id: self.id.unwrap(),
+            timer_type: self.state,
+            task: self.task_name.clone(),
+            at: Local::now(),
+        });
+    }
+
+    fn resume(&mut self) {
+        self.started_at = Some(Instant::now());
+        self.emit(LogEvent::Resumed {
+            id: self.id.unwrap(),
+            task: self.task_name.clone(),
+            at: Local::now(),
+        });
     }
 
     fn stop(&mut self) {
+        self.emit(LogEvent::Paused {
+            id: self.id.unwrap(),
+            task: self.task_name.clone(),
+            at: Local::now(),
+        });
         if let Some(t0) = self.started_at.take() {
             // TODO: check what take() does
             self.remaining -= t0.elapsed();
@@ -173,28 +202,15 @@ impl Timer {
     }
 
     pub fn toggle(&mut self) {
-        if !self.is_running() && !self.paused {
-            self.emit(TimerEvent::Started {
-                timer_type: self.state,
-                task: self.task_name.clone(),
-                at: Local::now(),
-            });
+        if !self.is_running() && !self.is_paused() {
             self.start();
             return;
         }
 
         if self.is_running() {
             self.stop();
-            self.emit(TimerEvent::Paused {
-                task: self.task_name.clone(),
-                at: Local::now(),
-            });
         } else {
-            self.start();
-            self.emit(TimerEvent::Resumed {
-                task: self.task_name.clone(),
-                at: Local::now(),
-            });
+            self.resume();
         }
         self.paused = !self.paused;
     }
@@ -213,8 +229,10 @@ impl Timer {
     }
 
     pub fn reset(&mut self) {
+        self.idle = true;
         self.remaining = self.state.duration(&self.durs);
         self.started_at = None;
+        self.id = None;
         self.paused = false;
     }
 
@@ -234,7 +252,8 @@ impl Timer {
         if let Some(t0) = self.started_at.as_ref()
             && self.remaining < t0.elapsed()
         {
-            self.emit(TimerEvent::Completed {
+            self.emit(LogEvent::Completed {
+                id: self.id.unwrap(),
                 task: self.task_name.clone(),
                 at: Local::now(),
                 work_secs: self.state.duration(&self.durs),
@@ -265,6 +284,9 @@ impl Timer {
             log::info!("Already using {:?} preset.", p);
             return;
         }
+        if self.id.is_some() {
+            self.persist_termination();
+        }
         let new = Durations::for_preset(p);
         self.durs = new;
         self.timeset = p;
@@ -273,7 +295,8 @@ impl Timer {
 
     // TODO: is it possible the gather the emit logic to one function?
     pub fn persist_termination(&mut self) {
-        self.emit(TimerEvent::Terminated {
+        self.emit(LogEvent::Terminated {
+            id: self.id.unwrap(),
             task: self.task_name.clone(),
             at: Local::now(),
             work_secs: (self.state.duration(&self.durs) - self.get_remaining()),
