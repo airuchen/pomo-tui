@@ -12,9 +12,11 @@ use ratatui::{
 use std::fmt;
 use std::io;
 
-use crate::{logging::append_event, timer::TimerType, utils};
 use crate::{
-    timer::{Preset, Timer},
+    logging::write_waybar_text,
+    logging::{self, append_event},
+    timer::{Preset, Timer, TimerMode},
+    utils,
     utils::create_large_ascii_numbers,
 };
 
@@ -165,6 +167,15 @@ impl App {
 
             // 4) Render TUI
             terminal.draw(|frame| self.draw(frame))?;
+
+            // 5) save state
+            write_waybar_text(
+                "pomo_waybar_state.json",
+                self.timer.get_mode(),
+                self.timer.is_paused(),
+                self.timer.is_idle(),
+                self.timer.get_remaining(),
+            );
         }
 
         // Persist data before exit
@@ -262,41 +273,42 @@ impl Widget for &App {
             .border_set(border::THICK);
 
         // TODO: still don't get what <'static> do...
-        let render_color = match (self.timer.get_state(), self.timer.is_paused()) {
+        let render_color = match (self.timer.get_mode(), self.timer.is_paused()) {
             (_, true) => Color::DarkGray,
-            (TimerType::Work, _) => Color::Yellow,
-            (TimerType::Break, _) => Color::Green,
+            (TimerMode::Work, _) => Color::Yellow,
+            (TimerMode::Break, _) => Color::Green,
         };
         let remaining_time = utils::fmt_duration(self.timer.get_remaining());
         let mut text: Vec<Line<'static>> =
             create_large_ascii_numbers(&remaining_time, render_color);
         let state_info = Line::from(vec![
-            Span::raw(self.timer.get_state().to_string()),
+            Span::raw(self.timer.get_mode().to_string()),
             Span::raw(" "),
             Span::raw(Local::now().format("%H:%M").to_string()),
         ]);
         text.push(state_info);
 
-        // For Normal mode, we print the task name
-        // For Input mode, we print "Enter the task name: <user_input>"
         let task_info = match self.app_mode {
             AppMode::Input => Line::from(vec![
-                Span::styled("Enter the task name: ", Style::default().fg(Color::Yellow)),
+                Span::styled("Enter the task name: ", Style::default().fg(Color::Green)),
                 Span::styled(
                     self.task_input.input.to_string(),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(Color::Green),
                 ),
             ]),
-            AppMode::Normal => Line::from(vec![Span::raw(self.timer.get_task_name().to_string())]),
+            AppMode::Normal => Line::from(vec![Span::styled(
+                self.timer.get_task_name().to_string(),
+                Style::default().fg(render_color).bold(),
+            )]),
         };
         text.push(task_info);
 
         let chunks = Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
             ])
             .split(area);
 

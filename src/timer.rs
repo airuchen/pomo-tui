@@ -15,15 +15,13 @@ pub enum Preset {
     Test,
 }
 
-// 
-
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub enum LogEvent {
     #[default]
     Idle,
     Started {
         id: Uuid,
-        timer_type: TimerType,
+        timer_type: TimerMode,
         task: String,
         at: DateTime<Local>,
     },
@@ -52,14 +50,14 @@ pub enum LogEvent {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize)]
-pub enum TimerType {
+pub enum TimerMode {
     // NOTE: pub so that we can use it outside of timer.rs module
     #[default]
     Work,
     Break,
 }
 
-impl TimerType {
+impl TimerMode {
     pub const fn toggle(self) -> Self {
         match self {
             Self::Work => Self::Break,
@@ -75,11 +73,11 @@ impl TimerType {
     }
 }
 
-impl fmt::Display for TimerType {
+impl fmt::Display for TimerMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TimerType::Work => f.write_str("Work"),
-            TimerType::Break => f.write_str("Break"),
+            TimerMode::Work => f.write_str("Work"),
+            TimerMode::Break => f.write_str("Break"),
         }
     }
 }
@@ -127,7 +125,7 @@ impl Default for Durations {
 pub struct Timer {
     started_at: Option<Instant>,
     remaining: Duration,
-    state: TimerType, // TODO: rename, maybe mode?
+    mode: TimerMode,
     timeset: Preset,
     durs: Durations,
     paused: bool,
@@ -141,11 +139,11 @@ pub struct Timer {
 impl Timer {
     pub fn new() -> Self {
         let durs = Durations::default();
-        let state = TimerType::Work;
+        let mode = TimerMode::Work;
         Self {
             started_at: None,
-            remaining: state.duration(&durs),
-            state: state,
+            remaining: mode.duration(&durs),
+            mode: mode,
             timeset: Preset::default(),
             durs: durs,
             paused: false,
@@ -174,7 +172,7 @@ impl Timer {
         self.id = Some(Uuid::new_v4());
         self.emit(LogEvent::Started {
             id: self.id.unwrap(),
-            timer_type: self.state,
+            timer_type: self.mode,
             task: self.task_name.clone(),
             at: Local::now(),
         });
@@ -216,7 +214,10 @@ impl Timer {
     }
 
     pub fn switch_mode(&mut self) {
-        self.state = self.state.toggle();
+        if self.id.is_some() {
+            self.persist_termination();
+        }
+        self.mode = self.mode.toggle();
         self.reset();
     }
 
@@ -228,9 +229,13 @@ impl Timer {
         self.paused
     }
 
+    pub fn is_idle(&self) -> bool {
+        self.idle
+    }
+
     pub fn reset(&mut self) {
         self.idle = true;
-        self.remaining = self.state.duration(&self.durs);
+        self.remaining = self.mode.duration(&self.durs);
         self.started_at = None;
         self.id = None;
         self.paused = false;
@@ -256,7 +261,7 @@ impl Timer {
                 id: self.id.unwrap(),
                 task: self.task_name.clone(),
                 at: Local::now(),
-                work_secs: self.state.duration(&self.durs),
+                work_secs: self.mode.duration(&self.durs),
             });
             self.switch_mode();
             if self.auto_continue {
@@ -267,8 +272,8 @@ impl Timer {
 
     // maybe return a struct with all the info needed?
     // TODO: should I always return ref?
-    pub fn get_state(&self) -> &TimerType {
-        &self.state
+    pub fn get_mode(&self) -> &TimerMode {
+        &self.mode
     }
 
     pub fn get_task_name(&self) -> &str {
@@ -299,25 +304,25 @@ impl Timer {
             id: self.id.unwrap(),
             task: self.task_name.clone(),
             at: Local::now(),
-            work_secs: (self.state.duration(&self.durs) - self.get_remaining()),
+            work_secs: (self.mode.duration(&self.durs) - self.get_remaining()),
         });
     }
 }
 
 #[test]
-fn init_timer_state() {
+fn init_timer_mode() {
     let t = Timer::new();
-    assert_eq!(t.state, TimerType::Work);
+    assert_eq!(t.mode, TimerMode::Work);
     assert_eq!(t.remaining, Duration::from_secs(25 * MIN));
     assert_eq!(t.durs, Durations::default());
 }
 
 #[test]
-fn timer_state_toggle() {
-    let mut ts = TimerType::default();
-    assert_eq!(ts, TimerType::Work);
+fn timer_mode_toggle() {
+    let mut ts = TimerMode::default();
+    assert_eq!(ts, TimerMode::Work);
     ts = ts.toggle();
-    assert_eq!(ts, TimerType::Break);
+    assert_eq!(ts, TimerMode::Break);
     ts = ts.toggle();
-    assert_eq!(ts, TimerType::Work);
+    assert_eq!(ts, TimerMode::Work);
 }
