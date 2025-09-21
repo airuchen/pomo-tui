@@ -14,7 +14,7 @@ use std::io;
 use crate::{
     logging::{append_event, write_waybar_text},
     timer::{Preset, Timer, TimerMode},
-    utils::{self, centered_area, create_large_ascii_numbers, render_keymap},
+    utils::{self, centered_area, create_large_ascii_numbers, render_keymap, KeyCommand},
 };
 
 const POPUP_WIDTH_PERCENT: u16 = 60;
@@ -231,21 +231,12 @@ impl App {
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match self.app_mode {
-            // Normal mode waiting for control
-            AppMode::Normal => match key_event.code {
-                KeyCode::Char('q') => self.exit(),
-                KeyCode::Char('?') => self.show_hint = !self.show_hint,
-                KeyCode::Char('i') => {
-                    self.app_mode = self.app_mode.toggle();
+            // Normal mode - use efficient KeyCommand lookup
+            AppMode::Normal => {
+                if let Some(command) = KeyCommand::from_keycode(key_event.code) {
+                    self.execute_command(command);
                 }
-                KeyCode::Char('r') => self.timer.reset(),
-                KeyCode::Char(' ') => self.timer.toggle(),
-                KeyCode::Char('s') => self.timer.switch_mode(),
-                KeyCode::Char('+') => self.timer.set_preset(Preset::Long),
-                KeyCode::Char('-') => self.timer.set_preset(Preset::Short),
-                KeyCode::Char('`') => self.timer.set_preset(Preset::Test),
-                _ => {}
-            },
+            }
 
             // Input mode for entering task name
             AppMode::Input => match key_event.code {
@@ -263,6 +254,21 @@ impl App {
                 }
                 _ => {}
             },
+        }
+    }
+
+    /// Executes a KeyCommand with direct dispatch for optimal performance
+    fn execute_command(&mut self, command: KeyCommand) {
+        match command {
+            KeyCommand::Quit => self.exit(),
+            KeyCommand::ToggleKeymap => self.show_hint = !self.show_hint,
+            KeyCommand::InputTask => self.app_mode = self.app_mode.toggle(),
+            KeyCommand::Reset => self.timer.reset(),
+            KeyCommand::Toggle => self.timer.toggle(),
+            KeyCommand::SwitchMode => self.timer.switch_mode(),
+            KeyCommand::SetLong => self.timer.set_preset(Preset::Long),
+            KeyCommand::SetShort => self.timer.set_preset(Preset::Short),
+            KeyCommand::SetTest => self.timer.set_preset(Preset::Test),
         }
     }
 
