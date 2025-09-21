@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 const MIN: u64 = 60;
+const MAX_EMIT_EVENTS: usize = 1000;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum Preset {
@@ -25,28 +26,32 @@ pub enum LogEvent {
         timer_type: TimerMode,
         task: String,
         at: DateTime<Local>,
+        remaining: u64,
     },
     Paused {
         id: Uuid,
         task: String,
         at: DateTime<Local>,
+        remaining: u64,
     },
     Resumed {
         id: Uuid,
         task: String,
         at: DateTime<Local>,
+        remaining: u64,
     },
     Terminated {
         id: Uuid,
         task: String,
         at: DateTime<Local>,
-        work_secs: Duration,
+        remaining: u64,
+        work_secs: u64,
     },
     Completed {
         id: Uuid,
         task: String,
         at: DateTime<Local>,
-        work_secs: Duration,
+        work_secs: u64,
     },
 }
 
@@ -144,9 +149,9 @@ impl Timer {
         Self {
             started_at: None,
             remaining: mode.duration(&durs),
-            mode: mode,
+            mode,
             timeset: Preset::default(),
-            durs: durs,
+            durs,
             paused: false,
             idle: true,
             auto_continue: true,
@@ -160,6 +165,10 @@ impl Timer {
     #[inline]
     fn emit(&mut self, event: LogEvent) {
         self.events.push_back(event);
+
+        if self.events.len() > MAX_EMIT_EVENTS {
+            self.events.pop_front();
+        }
     }
 
     // TODO: how is this done?
@@ -167,57 +176,78 @@ impl Timer {
         std::mem::take(&mut self.events).into_iter()
     }
 
+    fn current_id(&self) -> Uuid {
+        self.id.expect("Timer must have an ID when active")
+    }
+
     fn start(&mut self) {
         self.idle = false;
         self.started_at = Some(Instant::now());
         self.id = Some(Uuid::new_v4());
         self.emit(LogEvent::Started {
-            id: self.id.unwrap(),
+            id: self.current_id(),
             timer_type: self.mode,
             task: self.task_name.clone(),
             at: Local::now(),
+            remaining: self.get_remaining().as_secs(),
         });
     }
 
     fn resume(&mut self) {
         self.started_at = Some(Instant::now());
         self.emit(LogEvent::Resumed {
-            id: self.id.unwrap(),
+            id: self.current_id(),
             task: self.task_name.clone(),
             at: Local::now(),
+            remaining: self.get_remaining().as_secs(),
         });
     }
 
     fn stop(&mut self) {
         self.emit(LogEvent::Paused {
-            id: self.id.unwrap(),
+            id: self.current_id(),
             task: self.task_name.clone(),
             at: Local::now(),
+            remaining: self.get_remaining().as_secs(),
         });
         if let Some(t0) = self.started_at.take() {
-            // TODO: check what take() does
-            self.remaining -= t0.elapsed();
+            self.remaining = self.remaining.saturating_sub(t0.elapsed());
         }
     }
 
     pub fn toggle(&mut self) {
-        if !self.is_running() && !self.is_paused() {
-            self.start();
-            return;
+        match (self.is_running(), self.is_paused()) {
+            (false, false) => {
+                // Idle state -> start timer
+                self.start();
+                self.paused = false;
+            }
+            (true, false) => {
+                // Running -> pause it
+                self.stop();
+                self.paused = true;
+            }
+            (false, true) => {
+                // Paused resume it
+                self.resume();
+                self.paused = false;
+            }
+            (true, true) => {
+                log::warn!("Invalid timer state: running and paused");
+                self.paused = false;
+            }
         }
-
-        if self.is_running() {
-            self.stop();
-        } else {
-            self.resume();
-        }
-        self.paused = !self.paused;
     }
 
     pub fn switch_mode(&mut self) {
         if self.id.is_some() {
             self.persist_termination();
         }
+        self.mode = self.mode.toggle();
+        self.reset();
+    }
+
+    fn complet_and_switch(&mut self) {
         self.mode = self.mode.toggle();
         self.reset();
     }
@@ -244,25 +274,21 @@ impl Timer {
 
     pub fn get_remaining(&self) -> Duration {
         match self.started_at {
-            Some(t0) => {
-                if self.remaining > t0.elapsed() {
-                    return self.remaining - t0.elapsed();
-                }
-                Duration::ZERO
-            }
+            Some(t0) => self.remaining.saturating_sub(t0.elapsed()),
             None => self.remaining,
         }
     }
 
     pub fn update(&mut self) {
-        if let Some(t0) = self.started_at.as_ref()
-            && self.remaining < t0.elapsed()
-        {
+        if let Some(t0) = self.started_at.as_ref() {
+            if self.remaining > t0.elapsed() {
+                return;
+            }
             self.emit(LogEvent::Completed {
-                id: self.id.unwrap(),
+                id: self.current_id(),
                 task: self.task_name.clone(),
                 at: Local::now(),
-                work_secs: self.mode.duration(&self.durs),
+                work_secs: self.mode.duration(&self.durs).as_secs(),
             });
 
             let notification_msg = format!("{}: {}", self.mode, self.task_name);
@@ -272,15 +298,13 @@ impl Timer {
                 .icon("clock")
                 .show();
 
-            self.switch_mode();
+            self.complet_and_switch();
             if self.auto_continue {
                 self.toggle();
             }
         }
     }
 
-    // maybe return a struct with all the info needed?
-    // TODO: should I always return ref?
     pub fn get_mode(&self) -> &TimerMode {
         &self.mode
     }
@@ -310,10 +334,11 @@ impl Timer {
     // TODO: is it possible the gather the emit logic to one function?
     pub fn persist_termination(&mut self) {
         self.emit(LogEvent::Terminated {
-            id: self.id.unwrap(),
+            id: self.current_id(),
             task: self.task_name.clone(),
             at: Local::now(),
-            work_secs: (self.mode.duration(&self.durs) - self.get_remaining()),
+            remaining: self.get_remaining().as_secs(),
+            work_secs: (self.mode.duration(&self.durs) - self.get_remaining()).as_secs(),
         });
     }
 }

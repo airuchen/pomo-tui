@@ -5,7 +5,7 @@ use std::io::{BufWriter, Write};
 use std::time::Duration;
 
 use crate::timer::{LogEvent, TimerMode};
-use crate::utils::{self};
+use crate::utils;
 
 pub fn append_event(path: &str, event: &LogEvent) -> std::io::Result<()> {
     let f = OpenOptions::new().create(true).append(true).open(path)?;
@@ -13,7 +13,7 @@ pub fn append_event(path: &str, event: &LogEvent) -> std::io::Result<()> {
 
     // write JSON
     serde_json::to_writer(&mut w, event)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(|e| std::io::Error::other(format!("Failed to serialize event: {}", e)))?;
 
     // new line for json
     w.write_all(b"\n")?;
@@ -45,18 +45,21 @@ pub fn write_waybar_text(
 
     let state = WaybarState {
         text: format!("🍅 {mode} : {remaining_text} {status}"),
-        class: format!("{mode}"),
+        class: mode.to_string(),
     };
 
     // atomic write: *.tmp then rename
     let path_ref = std::path::Path::new(path);
-    let mut tmp = path_ref.to_owned();
-    tmp.set_extension("tmp");
+    let tmp = path_ref.with_extension("tmp");
 
-    let mut f = File::create(&tmp)?;
-    let json = serde_json::to_string(&state)?;
-    f.write_all(json.as_bytes())?;
-    f.flush()?;
+    {
+        let mut f = File::create(&tmp)?;
+        let json = serde_json::to_string(&state).map_err(|e| {
+            std::io::Error::other(format!("Failed to serialize waybar state: {}", e))
+        })?;
+        f.write_all(json.as_bytes())?;
+        f.flush()?;
+    }
     rename(tmp, path_ref)?;
     Ok(())
 }

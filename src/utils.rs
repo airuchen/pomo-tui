@@ -17,7 +17,8 @@ pub fn fmt_duration(d: Duration) -> String {
 // For TUI
 // TODO: can I give a namespace?
 const MIN_PAD: &str = "  "; // TODO: Why not String here?
-const DIGITS: [[&str; 5]; 10] = [
+const ASCII_ART_HEIGHT: usize = 5;
+const DIGITS: [[&str; ASCII_ART_HEIGHT]; 10] = [
     [" ████ ", "██  ██", "██  ██", "██  ██", " ████ "], // 0
     ["  ██  ", " ████ ", "  ██  ", "  ██  ", " █████"], // 1
     [" ████ ", "██  ██", "   ██ ", "  ██  ", "██████"], // 2
@@ -29,9 +30,9 @@ const DIGITS: [[&str; 5]; 10] = [
     [" ████ ", "██  ██", " ████ ", "██  ██", " ████ "], // 8
     [" ████ ", "██  ██", " █████", "    ██", " ████ "], // 9
 ];
-const COLON: [&str; 5] = ["     ", " ██  ", "     ", " ██  ", "     "];
+const COLON: [&str; ASCII_ART_HEIGHT] = ["     ", " ██  ", "     ", " ██  ", "     "];
 
-fn glyph(ch: char) -> Option<&'static [&'static str; 5]> {
+fn glyph(ch: char) -> Option<&'static [&'static str; ASCII_ART_HEIGHT]> {
     // TODO: I don't get the return type here
     match ch {
         '0'..='9' => Some(&DIGITS[(ch as u8 - b'0') as usize]),
@@ -42,14 +43,14 @@ fn glyph(ch: char) -> Option<&'static [&'static str; 5]> {
 
 pub fn create_large_ascii_numbers(time_text: &str, color: Color) -> Vec<Line<'static>> {
     let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
-    let mut lines = [
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
+    let estimated_width = time_text.len() * 8;
+    let mut lines: [String; ASCII_ART_HEIGHT] = [
+        String::with_capacity(estimated_width),
+        String::with_capacity(estimated_width),
+        String::with_capacity(estimated_width),
+        String::with_capacity(estimated_width),
+        String::with_capacity(estimated_width),
     ];
-
     for ch in time_text.chars() {
         if let Some(rows) = glyph(ch) {
             for (i, row) in rows.iter().enumerate() {

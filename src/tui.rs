@@ -17,6 +17,13 @@ use crate::{
     utils::{self, centered_area, create_large_ascii_numbers, render_keymap},
 };
 
+const POPUP_WIDTH_PERCENT: u16 = 60;
+const POPUP_HEIGHT_PERCENT: u16 = 70;
+const TIMER_AREA_WIDTH_PERCENT: u16 = 100;
+const TIMER_AREA_HEIGHT_PERCENT: u16 = 50;
+const HISTORY_FILE_PATH: &str = "history.json";
+const WAYBAR_STATE_FILE_PATH: &str = "pomo_waybar_state.json";
+
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 enum AppMode {
     #[default]
@@ -74,12 +81,10 @@ impl TaskInput {
         self.move_cursor_right();
     }
 
-    /// Returns the type index based on the character position.
-    ///
-    /// Since each character in a string can container multiple bytes, it's a necessary to
-    /// calculate the type index based on the index of the character.
+    /// Converts character index to byte index for Unicode-safe string manipulation.
+    /// This is needed because Rust strings are UTF-8 encoded, where characters
+    /// can be multiple bytes, but String::insert() requires byte indices.
     fn byte_index(&self) -> usize {
-        // TODO: What are we doing here?
         self.input
             .char_indices()
             .map(|(i, _)| i)
@@ -112,7 +117,7 @@ impl TaskInput {
         }
     }
 
-    const fn reset_cursor(&mut self) {
+    fn reset_cursor(&mut self) {
         self.character_index = 0;
     }
 
@@ -161,26 +166,32 @@ impl App {
 
             // 3) drain and persist events
             for event in self.timer.drain_events() {
-                let _ = append_event("history.json", &event)?;
+                if let Err(e) = append_event(HISTORY_FILE_PATH, &event) {
+                    log::error!("Failed to append event: {}", e);
+                }
             }
 
             // 4) Render TUI
             terminal.draw(|frame| self.draw(frame, self.show_hint))?;
 
             // 5) save state
-            let _ = write_waybar_text(
-                "pomo_waybar_state.json",
+            if let Err(e) = write_waybar_text(
+                WAYBAR_STATE_FILE_PATH,
                 self.timer.get_mode(),
                 self.timer.is_paused(),
                 self.timer.is_idle(),
                 self.timer.get_remaining(),
-            );
+            ) {
+                log::error!("Failed to write waybar state: {}", e);
+            };
         }
 
         // Persist data before exit
         self.timer.persist_termination();
         for event in self.timer.drain_events() {
-            let _ = append_event("history.json", &event)?;
+            if let Err(e) = append_event(HISTORY_FILE_PATH, &event) {
+                log::error!("Failed to append event: {}", e);
+            }
         }
         Ok(())
     }
@@ -208,7 +219,7 @@ impl App {
         frame.render_widget(self, content);
 
         if show_hint {
-            let popup_area = centered_area(area, 60, 70);
+            let popup_area = centered_area(area, POPUP_WIDTH_PERCENT, POPUP_HEIGHT_PERCENT);
 
             // clears out any background in the area before rendering the popup
             frame.render_widget(Clear, popup_area);
@@ -237,7 +248,7 @@ impl App {
             },
 
             // Input mode for entering task name
-            AppMode::Input if key_event.kind == KeyEventKind::Press => match key_event.code {
+            AppMode::Input => match key_event.code {
                 KeyCode::Enter => {
                     self.timer.set_task_name(&self.task_input.confirm_task());
                     self.app_mode = AppMode::Normal;
@@ -252,7 +263,6 @@ impl App {
                 }
                 _ => {}
             },
-            AppMode::Input => {}
         }
     }
 
@@ -260,8 +270,6 @@ impl App {
         self.exit = true;
     }
 }
-
-impl App {}
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
@@ -282,13 +290,15 @@ impl Widget for &App {
         text.push(state_info);
 
         let task_info = match self.app_mode {
-            AppMode::Input => Line::from(vec![
-                Span::styled("Enter the task name: ", Style::default().fg(Color::Green)),
-                Span::styled(
-                    self.task_input.input.to_string(),
-                    Style::default().fg(Color::Green),
-                ),
-            ]),
+            AppMode::Input => {
+                let mut input_text = self.task_input.input.clone();
+                input_text.insert(self.task_input.byte_index(), '|');
+
+                Line::from(vec![
+                    Span::styled("Enter the task name: ", Style::default().fg(Color::Green)),
+                    Span::styled(input_text, Style::default().fg(Color::Green)),
+                ])
+            }
             AppMode::Normal => Line::from(vec![Span::styled(
                 self.timer.get_task_name().to_string(),
                 Style::default().fg(render_color).bold(),
@@ -296,8 +306,9 @@ impl Widget for &App {
         };
         text.push(task_info);
 
-        Paragraph::new(Text::from(text))
-            .centered()
-            .render(centered_area(area, 100, 50), buf);
+        Paragraph::new(Text::from(text)).centered().render(
+            centered_area(area, TIMER_AREA_WIDTH_PERCENT, TIMER_AREA_HEIGHT_PERCENT),
+            buf,
+        );
     }
 }
