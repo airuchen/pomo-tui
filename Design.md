@@ -55,17 +55,15 @@
     - [ ] [Optional] Buffer time (5s) before entering the next state
 - [ ] Task Logging
     - [x] Set/Show the current task
-    - [ ] Task logging
+    - [x] Task logging
         - [x] Log into a file
-        - [ ] track with uuid so that name doesn't matter.
+        - [x] track with uuid so that name doesn't matter.
         - [x] if the task name change, the logged task name needs to be updated
         - [x] We should log the current task and the break time before exit the program.
         - [ ] [Optional] statistic mode to visualize chart
-        - [ ]
-
-        ~~- [ ] Log with proper serialization structure~~
-    - [ ] Serialization
-    - [ ] Pomo state Pipe to waybar
+    - [x] Pomo state Pipe to waybar
+        - [ ] [Optional] write to a given path
+    - [x] notification, with notify-rust
 - [ ] TUI
     - [x] ASCII number
     - [ ] Hint
@@ -78,3 +76,4 @@
 - [ ] Sharing
     - [ ] Learning in general
     - [ ] Learning in Rust
+

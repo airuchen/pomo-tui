@@ -13,8 +13,8 @@ use std::fmt;
 use std::io;
 
 use crate::{
+    logging::append_event,
     logging::write_waybar_text,
-    logging::{self, append_event},
     timer::{Preset, Timer, TimerMode},
     utils,
     utils::create_large_ascii_numbers,
@@ -169,7 +169,7 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
 
             // 5) save state
-            write_waybar_text(
+            let _ = write_waybar_text(
                 "pomo_waybar_state.json",
                 self.timer.get_mode(),
                 self.timer.is_paused(),
@@ -314,7 +314,6 @@ impl Widget for &App {
 
         Paragraph::new(Text::from(text))
             .centered()
-            // .block(block)
             .render(chunks[1], buf);
     }
 }

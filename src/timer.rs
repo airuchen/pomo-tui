@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use notify_rust::Notification;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::fmt;
@@ -76,8 +77,8 @@ impl TimerMode {
 impl fmt::Display for TimerMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TimerMode::Work => f.write_str("Work"),
-            TimerMode::Break => f.write_str("Break"),
+            TimerMode::Work => f.write_str("Work 👨‍💻"),
+            TimerMode::Break => f.write_str("Break ☕"),
         }
     }
 }
@@ -263,6 +264,14 @@ impl Timer {
                 at: Local::now(),
                 work_secs: self.mode.duration(&self.durs),
             });
+
+            let notification_msg = format!("{}: {}", self.mode, self.task_name);
+            let _ = Notification::new()
+                .summary("Completed")
+                .body(&notification_msg)
+                .icon("clock")
+                .show();
+
             self.switch_mode();
             if self.auto_continue {
                 self.toggle();

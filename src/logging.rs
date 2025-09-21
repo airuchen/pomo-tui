@@ -8,7 +8,7 @@ use crate::timer::{LogEvent, TimerMode};
 use crate::utils::{self};
 
 pub fn append_event(path: &str, event: &LogEvent) -> std::io::Result<()> {
-    let mut f = OpenOptions::new().create(true).append(true).open(path)?;
+    let f = OpenOptions::new().create(true).append(true).open(path)?;
     let mut w = BufWriter::new(f);
 
     // write JSON
