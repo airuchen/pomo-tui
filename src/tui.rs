@@ -4,20 +4,17 @@ use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    symbols::border,
+    style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Clear, Paragraph, Widget},
 };
 use std::fmt;
 use std::io;
 
 use crate::{
-    logging::append_event,
-    logging::write_waybar_text,
+    logging::{append_event, write_waybar_text},
     timer::{Preset, Timer, TimerMode},
-    utils,
-    utils::create_large_ascii_numbers,
+    utils::{self, centered_area, create_large_ascii_numbers, render_keymap},
 };
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -138,6 +135,7 @@ pub struct App {
     exit: bool,
     app_mode: AppMode,
     task_input: TaskInput,
+    show_hint: bool,
 }
 
 impl App {
@@ -147,6 +145,7 @@ impl App {
             exit: false,
             app_mode: AppMode::default(),
             task_input: TaskInput::new(),
+            show_hint: false,
         }
     }
     /// runs the application's main loop until the user quits
@@ -166,7 +165,7 @@ impl App {
             }
 
             // 4) Render TUI
-            terminal.draw(|frame| self.draw(frame))?;
+            terminal.draw(|frame| self.draw(frame, self.show_hint))?;
 
             // 5) save state
             let _ = write_waybar_text(
@@ -198,32 +197,46 @@ impl App {
         Ok(())
     }
 
-    fn draw(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
+    fn draw(&self, frame: &mut Frame, show_hint: bool) {
+        let area = frame.area();
+
+        let layout = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
+        let [instructions, content] = area.layout(&layout);
+
+        frame.render_widget(Line::from("?: Keymap, q: Quit").centered(), instructions);
+
+        frame.render_widget(self, content);
+
+        if show_hint {
+            let popup_area = centered_area(area, 60, 70);
+
+            // clears out any background in the area before rendering the popup
+            frame.render_widget(Clear, popup_area);
+
+            let keymap_table = render_keymap();
+            frame.render_widget(keymap_table, popup_area);
+        }
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match self.app_mode {
+            // Normal mode waiting for control
             AppMode::Normal => match key_event.code {
                 KeyCode::Char('q') => self.exit(),
-                KeyCode::Char(' ') => self.toggle(),
-                KeyCode::Char('s') => self.switch_mode(),
-                KeyCode::Char('r') => self.reset(),
+                KeyCode::Char('?') => self.show_hint = !self.show_hint,
                 KeyCode::Char('i') => {
                     self.app_mode = self.app_mode.toggle();
                 }
-                KeyCode::Char('+') => {
-                    self.timer.set_preset(Preset::Long);
-                }
-                KeyCode::Char('-') => {
-                    self.timer.set_preset(Preset::Short);
-                }
-                KeyCode::Char('t') => {
-                    self.timer.set_preset(Preset::Test);
-                }
-
+                KeyCode::Char('r') => self.timer.reset(),
+                KeyCode::Char(' ') => self.timer.toggle(),
+                KeyCode::Char('s') => self.timer.switch_mode(),
+                KeyCode::Char('+') => self.timer.set_preset(Preset::Long),
+                KeyCode::Char('-') => self.timer.set_preset(Preset::Short),
+                KeyCode::Char('`') => self.timer.set_preset(Preset::Test),
                 _ => {}
             },
+
+            // Input mode for entering task name
             AppMode::Input if key_event.kind == KeyEventKind::Press => match key_event.code {
                 KeyCode::Enter => {
                     self.timer.set_task_name(&self.task_input.confirm_task());
@@ -248,30 +261,10 @@ impl App {
     }
 }
 
-impl App {
-    // TODO: this seems just a wrapper to call the timer's interface, do I want this?
-    fn toggle(&mut self) {
-        self.timer.toggle();
-    }
-
-    fn switch_mode(&mut self) {
-        self.timer.switch_mode();
-    }
-
-    fn reset(&mut self) {
-        self.timer.reset();
-    }
-}
+impl App {}
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Line::from("Pomo TUI".bold());
-        let instructions = Line::from(vec![" Decrement ".into(), "<Left>".blue().bold()]);
-        let block = Block::bordered()
-            .title(title.centered())
-            .title_bottom(instructions.centered())
-            .border_set(border::THICK);
-
         // TODO: still don't get what <'static> do...
         let render_color = match (self.timer.get_mode(), self.timer.is_paused()) {
             (_, true) => Color::DarkGray,
@@ -303,17 +296,8 @@ impl Widget for &App {
         };
         text.push(task_info);
 
-        let chunks = Layout::default()
-            .direction(ratatui::layout::Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ])
-            .split(area);
-
         Paragraph::new(Text::from(text))
             .centered()
-            .render(chunks[1], buf);
+            .render(centered_area(area, 100, 50), buf);
     }
 }
