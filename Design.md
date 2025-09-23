@@ -64,16 +64,20 @@
     - [x] Pomo state Pipe to waybar
         - [ ] [Optional] write to a given path
     - [x] notification, with notify-rust
-- [ ] TUI
+- [x] TUI
     - [x] ASCII number
-    - [ ] Hint
-    - [ ] Adjust Font size
+    - [x] Hint
+- [ ] Server
+    - [ ] Architecture
+    - [ ] Async
+- [ ] Deliever
+    - [ ] Wrap with Docker and default daemon
 - [ ] Clean code
     - [ ] Renaming
     - [ ] Logic cleanup in POMO
         - [ ] Do I need all the member variable to track the state/duration/preset?
     - [ ] Can I wrap up exposed element to a strct?
 - [ ] Sharing
-    - [ ] Learning in general
+    - [x] Learning in general
     - [ ] Learning in Rust
 
