@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use notify_rust::Notification;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -9,12 +9,22 @@ use uuid::Uuid;
 const MIN: u64 = 60;
 const MAX_EMIT_EVENTS: usize = 1000;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Preset {
     #[default]
     Short,
     Long,
     Test,
+}
+
+impl fmt::Display for Preset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Preset::Short => f.write_str("Short"),
+            Preset::Long => f.write_str("Long"),
+            Preset::Test => f.write_str("Test"),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
@@ -125,7 +135,16 @@ impl Default for Durations {
     }
 }
 
-// TODO: maybe a session struct for a session name, id, time...
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimerStatus {
+    pub mode: String,
+    pub remaining: u64,
+    pub preset: String,
+    pub is_paused: bool,
+    pub is_idle: bool,
+    pub is_running: bool,
+    pub task: String,
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct Timer {
@@ -305,12 +324,28 @@ impl Timer {
         }
     }
 
+    pub fn get_timer_status(&self) -> TimerStatus {
+        TimerStatus {
+            task: self.get_task_name().to_string(),
+            remaining: self.get_remaining().as_secs(),
+            preset: self.get_preset().to_string(),
+            is_paused: self.is_paused(),
+            is_idle: self.is_idle(),
+            is_running: self.is_running(),
+            mode: self.get_mode().to_string(),
+        }
+    }
+
     pub fn get_mode(&self) -> &TimerMode {
         &self.mode
     }
 
     pub fn get_task_name(&self) -> &str {
         &self.task_name
+    }
+
+    pub fn get_preset(&self) -> &Preset {
+        &self.timeset
     }
 
     pub fn set_task_name(&mut self, new_task_name: &str) {
