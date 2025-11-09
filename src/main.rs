@@ -9,6 +9,7 @@ use crate::server::core::PomoServer;
 use crate::server::http::HttpServer;
 use crate::server::tcp::TcpServer;
 use anyhow::Result;
+use pomo_tui::client::tcp::PomoClient;
 use std::env;
 use tui::App;
 
@@ -17,14 +18,27 @@ async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     match args.get(1).map(|s| s.as_str()) {
-        Some("--server") => {
-            println!("Starting Pomo server");
-            start_server().await
-        }
         Some("--help") => {
             print_help();
             Ok(())
         }
+        Some("--server") => {
+            println!("Starting Pomo server");
+            start_server().await
+        }
+
+        Some("--experimental") => {
+            if server_exists().await {
+                println!("Connecting to existing server ...");
+                // start_network_tui().awiat()
+                todo!()
+            } else {
+                println!("Starting embedded server and TUI");
+                // start_embedded_server_and_tui().await()
+                todo!()
+            }
+        }
+
         _ => {
             let mut terminal = ratatui::init();
             let app_result = App::new().run(&mut terminal);
@@ -35,6 +49,13 @@ async fn main() -> Result<()> {
     }
 }
 
+async fn server_exists() -> bool {
+    match tokio::net::TcpStream::connect("127.0.0.1:1880").await {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
 async fn start_server() -> Result<()> {
     let pomo_server = PomoServer::new();
     let tcp_server = TcpServer::new(pomo_server.clone());
@@ -42,6 +63,16 @@ async fn start_server() -> Result<()> {
 
     let tcp_task = tokio::spawn(async move { tcp_server.start("127.0.0.1:1880").await });
     let http_task = tokio::spawn(async move { http_server.start("127.0.0.1:1881").await });
+
+    // Test client
+    {
+        let mut client = PomoClient::new();
+        client.connect("127.0.0.1:1880").await?;
+        let response = client
+            .send_request(pomo_tui::protocol::Request::Start)
+            .await?;
+        println!("response: {:?}", response);
+    }
 
     println!("Server started");
 
