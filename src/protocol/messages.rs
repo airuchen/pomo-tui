@@ -21,3 +21,13 @@ pub enum Response {
     Error(String),
     Pong,
 }
+
+#[derive(Deserialize)]
+pub struct SetTaskRequest {
+    pub task: String,
+}
+
+#[derive(Deserialize)]
+pub struct SetPresetRequest {
+    pub preset: Preset,
+}
