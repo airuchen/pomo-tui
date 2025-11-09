@@ -8,11 +8,12 @@ mod utils;
 use crate::server::core::PomoServer;
 use crate::server::http::HttpServer;
 use crate::server::tcp::TcpServer;
+use anyhow::Result;
 use std::env;
 use tui::App;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     match args.get(1).map(|s| s.as_str()) {
@@ -34,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
+async fn start_server() -> Result<()> {
     let pomo_server = PomoServer::new();
     let tcp_server = TcpServer::new(pomo_server.clone());
     let http_server = HttpServer::new(pomo_server);
