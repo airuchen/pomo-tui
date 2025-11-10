@@ -1,4 +1,5 @@
 use crate::protocol::{Request, Response};
+use anyhow::Result;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
@@ -10,21 +11,19 @@ pub struct TcpServer {
 }
 
 impl TcpServer {
-    pub fn new(server: PomoServer) -> Self {
-        Self {
-            server: Arc::new(server),
-        }
+    pub fn new(server: Arc<PomoServer>) -> Self {
+        Self { server }
     }
 
-    pub async fn start(&self, addr: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start(&self, addr: &str) -> Result<()> {
         // implement TCP listener
         let listener = TcpListener::bind(addr).await?;
-        println!("Pomo TcpServer listening on {}", addr);
+        eprintln!("Pomo TcpServer listening on {}", addr);
 
         // Accept connections in a loop
         loop {
             let (stream, _) = listener.accept().await?;
-            println!("New client connected");
+            eprintln!("New client connected");
 
             let server = Arc::clone(&self.server);
             tokio::spawn(async move {
@@ -38,10 +37,7 @@ impl TcpServer {
         // Ok(())
     }
 
-    async fn handle_connection_static(
-        server: Arc<PomoServer>,
-        stream: TcpStream,
-    ) -> std::io::Result<()> {
+    async fn handle_connection_static(server: Arc<PomoServer>, stream: TcpStream) -> Result<()> {
         let (read_half, mut write_half) = stream.into_split();
         // create BufReader for line-based reading
         let mut reader = BufReader::new(read_half);
@@ -52,7 +48,7 @@ impl TcpServer {
             // Read JSON requests line by line
             match reader.read_line(&mut line).await {
                 Ok(0) => {
-                    println!("Client disconnected");
+                    eprintln!("Client disconnected");
                     break;
                 }
                 Ok(_) => {

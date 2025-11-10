@@ -92,8 +92,8 @@ impl TimerMode {
 impl fmt::Display for TimerMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TimerMode::Work => f.write_str("Work 👨‍💻"),
-            TimerMode::Break => f.write_str("Break ☕"),
+            TimerMode::Work => f.write_str("Work"),
+            TimerMode::Break => f.write_str("Break"),
         }
     }
 }
