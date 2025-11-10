@@ -9,12 +9,11 @@ use ratatui::{
     widgets::{Clear, Paragraph, Widget},
 };
 use std::fmt;
-use std::io;
 
 use crate::{
-    logging::{append_event, write_waybar_text},
-    timer::{Preset, Timer, TimerMode},
-    utils::{self, centered_area, create_large_ascii_numbers, render_keymap, KeyCommand},
+    client::PomoClient,
+    timer::TimerStatus,
+    utils::{self, KeyCommand, centered_area, create_large_ascii_numbers, render_keymap},
 };
 
 const POPUP_WIDTH_PERCENT: u16 = 60;
@@ -135,18 +134,20 @@ impl TaskInput {
 }
 
 #[derive(Debug, Default)]
-pub struct App {
-    timer: Timer,
+pub struct ServerApp {
+    pomo_client: PomoClient,
+    cached_status: Option<TimerStatus>,
     exit: bool,
     app_mode: AppMode,
     task_input: TaskInput,
     show_hint: bool,
 }
 
-impl App {
-    pub fn new() -> Self {
+impl ServerApp {
+    pub fn new(pomo_client: PomoClient) -> Self {
         Self {
-            timer: Timer::new(),
+            pomo_client: pomo_client,
+            cached_status: None,
             exit: false,
             app_mode: AppMode::default(),
             task_input: TaskInput::new(),
@@ -154,54 +155,43 @@ impl App {
         }
     }
     /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         while !self.exit {
-            // 1) Update the timer
-            self.timer.update();
-
-            // 2) Check for input events
-            if event::poll(std::time::Duration::from_millis(100))? {
-                self.handle_events()?;
-            }
-
-            // 3) drain and persist events
-            for event in self.timer.drain_events() {
-                if let Err(e) = append_event(HISTORY_FILE_PATH, &event) {
-                    log::error!("Failed to append event: {}", e);
+            // Update cached status
+            match self
+                .pomo_client
+                .send_request(crate::protocol::Request::GetStatus)
+                .await
+            {
+                Ok(crate::protocol::messages::Response::Status(status)) => {
+                    self.cached_status = Some(status);
                 }
+                Ok(_) => {}
+                Err(_) => {}
             }
 
-            // 4) Render TUI
+            // 1) Check for input events
+            if event::poll(std::time::Duration::from_millis(100))? {
+                self.handle_events().await?;
+            }
+
             terminal.draw(|frame| self.draw(frame, self.show_hint))?;
 
-            // 5) save state
-            if let Err(e) = write_waybar_text(
-                WAYBAR_STATE_FILE_PATH,
-                self.timer.get_mode(),
-                self.timer.is_paused(),
-                self.timer.is_idle(),
-                self.timer.get_remaining(),
-            ) {
-                log::error!("Failed to write waybar state: {}", e);
-            };
+            // TODO: write_waybar_text
         }
 
-        // Persist data before exit
-        self.timer.persist_termination();
-        for event in self.timer.drain_events() {
-            if let Err(e) = append_event(HISTORY_FILE_PATH, &event) {
-                log::error!("Failed to append event: {}", e);
-            }
-        }
+        // TODO: server now should be charge of persisting logging
+        // persist_termination
+
         Ok(())
     }
 
-    fn handle_events(&mut self) -> io::Result<()> {
+    async fn handle_events(&mut self) -> anyhow::Result<()> {
         match event::read()? {
             // it's important to check that the event is a key press event as
             // crossterm also emits key release and repeat events on Windows.
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+                self.handle_key_event(key_event).await?;
             }
             _ => {}
         };
@@ -229,47 +219,104 @@ impl App {
         }
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
+    async fn handle_key_event(&mut self, key_event: KeyEvent) -> anyhow::Result<()> {
         match self.app_mode {
             // Normal mode - use efficient KeyCommand lookup
             AppMode::Normal => {
                 if let Some(command) = KeyCommand::from_keycode(key_event.code) {
-                    self.execute_command(command);
+                    self.execute_command(command).await?
                 }
+                Ok(())
             }
 
             // Input mode for entering task name
             AppMode::Input => match key_event.code {
                 KeyCode::Enter => {
-                    self.timer.set_task_name(&self.task_input.confirm_task());
+                    let _ = self
+                        .pomo_client
+                        .set_task_name(self.task_input.confirm_task())
+                        .await;
                     self.app_mode = AppMode::Normal;
+                    Ok(())
                 }
-                KeyCode::Char(to_insert) => self.task_input.enter_char(to_insert),
-                KeyCode::Backspace => self.task_input.delete_char(),
-                KeyCode::Left => self.task_input.move_cursor_left(),
-                KeyCode::Right => self.task_input.move_cursor_right(),
+                KeyCode::Char(to_insert) => {
+                    self.task_input.enter_char(to_insert);
+                    Ok(())
+                }
+                KeyCode::Backspace => {
+                    self.task_input.delete_char();
+                    Ok(())
+                }
+                KeyCode::Left => {
+                    self.task_input.move_cursor_left();
+                    Ok(())
+                }
+                KeyCode::Right => {
+                    self.task_input.move_cursor_right();
+                    Ok(())
+                }
                 KeyCode::Esc => {
                     self.app_mode = AppMode::Normal;
                     self.task_input.break_input();
+                    Ok(())
                 }
-                _ => {}
+                _ => Ok(()),
             },
         }
     }
 
     /// Executes a KeyCommand with direct dispatch for optimal performance
-    fn execute_command(&mut self, command: KeyCommand) {
+    async fn execute_command(&mut self, command: KeyCommand) -> anyhow::Result<()> {
         match command {
             KeyCommand::Quit => self.exit(),
             KeyCommand::ToggleKeymap => self.show_hint = !self.show_hint,
             KeyCommand::InputTask => self.app_mode = self.app_mode.toggle(),
-            KeyCommand::Reset => self.timer.reset(),
-            KeyCommand::Toggle => self.timer.toggle(),
-            KeyCommand::SwitchMode => self.timer.switch_mode(),
-            KeyCommand::SetLong => self.timer.set_preset(Preset::Long),
-            KeyCommand::SetShort => self.timer.set_preset(Preset::Short),
-            KeyCommand::SetTest => self.timer.set_preset(Preset::Test),
+            KeyCommand::Reset => {
+                self.pomo_client
+                    .send_request(crate::protocol::Request::Reset)
+                    .await?;
+            }
+            KeyCommand::Toggle => {
+                if let Some(status) = &self.cached_status {
+                    if status.is_paused || status.is_idle {
+                        self.pomo_client
+                            .send_request(crate::protocol::Request::Start)
+                            .await?;
+                    } else {
+                        self.pomo_client
+                            .send_request(crate::protocol::Request::Pause)
+                            .await?;
+                    }
+                }
+            }
+            KeyCommand::SwitchMode => {
+                self.pomo_client
+                    .send_request(crate::protocol::Request::SwitchMode)
+                    .await?;
+            }
+            KeyCommand::SetLong => {
+                self.pomo_client
+                    .send_request(crate::protocol::Request::SetPreset(
+                        crate::timer::Preset::Long,
+                    ))
+                    .await?;
+            }
+            KeyCommand::SetShort => {
+                self.pomo_client
+                    .send_request(crate::protocol::Request::SetPreset(
+                        crate::timer::Preset::Short,
+                    ))
+                    .await?;
+            }
+            KeyCommand::SetTest => {
+                self.pomo_client
+                    .send_request(crate::protocol::Request::SetPreset(
+                        crate::timer::Preset::Test,
+                    ))
+                    .await?;
+            }
         }
+        Ok(())
     }
 
     fn exit(&mut self) {
@@ -277,19 +324,36 @@ impl App {
     }
 }
 
-impl Widget for &App {
+impl Widget for &ServerApp {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // TODO: still don't get what <'static> do...
-        let render_color = match (self.timer.get_mode(), self.timer.is_paused()) {
-            (_, true) => Color::DarkGray,
-            (TimerMode::Work, _) => Color::Yellow,
-            (TimerMode::Break, _) => Color::Green,
+        let (render_color, remaining_time, mode_text, task_name) = match &self.cached_status {
+            Some(status) => {
+                let color = if status.is_paused {
+                    Color::DarkGray
+                } else {
+                    match status.mode.as_str() {
+                        "Work" => Color::Yellow,
+                        "Break" => Color::Green,
+                        _ => Color::White,
+                    }
+                };
+
+                let time = utils::fmt_duration(std::time::Duration::from_secs(status.remaining));
+                (color, time, status.mode.clone(), status.task.clone())
+            }
+
+            None => (
+                Color::DarkGray,
+                "00:00".to_string(),
+                "Connecting...".to_string(),
+                "".to_string(),
+            ),
         };
-        let remaining_time = utils::fmt_duration(self.timer.get_remaining());
+
         let mut text: Vec<Line<'static>> =
             create_large_ascii_numbers(&remaining_time, render_color);
         let state_info = Line::from(vec![
-            Span::raw(self.timer.get_mode().to_string()),
+            Span::raw(mode_text),
             Span::raw(" "),
             Span::raw(Local::now().format("%H:%M").to_string()),
         ]);
@@ -306,7 +370,7 @@ impl Widget for &App {
                 ])
             }
             AppMode::Normal => Line::from(vec![Span::styled(
-                self.timer.get_task_name().to_string(),
+                task_name,
                 Style::default().fg(render_color).bold(),
             )]),
         };

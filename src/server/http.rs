@@ -1,7 +1,7 @@
+use anyhow::Result;
 use axum::{
     Router,
     extract::State,
-    http::StatusCode,
     response::Json,
     routing::{get, post, put},
 };
@@ -19,14 +19,12 @@ pub struct HttpServer {
 }
 
 impl HttpServer {
-    pub fn new(server: PomoServer) -> Self {
-        Self {
-            server: Arc::new(server),
-        }
+    pub fn new(server: Arc<PomoServer>) -> Self {
+        Self { server }
     }
 
     // TODO: how to warn if we call wrongly?
-    pub async fn start(&self, addr: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start(&self, addr: &str) -> Result<()> {
         let app = Router::new()
             .route("/ping", get(ping_handler))
             .route("/timer/status", get(get_status_handler))
@@ -39,8 +37,8 @@ impl HttpServer {
             .route("/timer/preset", put(set_preset_handler))
             .with_state(self.server.clone());
 
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        println!("HttpServer listening on {}", addr);
+        let listener = TcpListener::bind(addr).await?;
+        eprintln!("HttpServer listening on {}", addr);
 
         axum::serve(listener, app).await?;
         Ok(())

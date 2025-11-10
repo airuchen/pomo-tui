@@ -1,9 +1,8 @@
 use crate::protocol::{Request, Response};
-use crate::timer::{Timer};
+use crate::timer::Timer;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[derive(Clone)]
 pub struct PomoServer {
     timer: Arc<Mutex<Timer>>,
 }
