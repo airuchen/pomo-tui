@@ -1,16 +1,15 @@
 use crate::protocol::{Request, Response};
 use crate::timer::Timer;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub struct PomoServer {
-    timer: Arc<Mutex<Timer>>,
+    timer: Mutex<Timer>,
 }
 
 impl PomoServer {
     pub fn new() -> Self {
         Self {
-            timer: Arc::new(Mutex::new(Timer::new())),
+            timer: Mutex::new(Timer::new()),
         }
     }
 
