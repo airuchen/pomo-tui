@@ -20,3 +20,9 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Rust Release binary
+      uses: rust-build/rust-build.action@v1.4.5
+      with:
+        RUSTTARGET: x86_64-unknown-linux-musl
+        TOOLCHAIN_VERSION: stable
+        ARCHIVE_NAME: pomo-tui-x86_64-linux-musl.tar.gz
