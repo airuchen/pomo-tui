@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [created]  # Also triggers when creating release via GitHub UI
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build Release Binary
+      uses: rust-build/rust-build.action@v1.4.5
+      with:
+        RUSTTARGET: x86_64-unknown-linux-musl
+        TOOLCHAIN_VERSION: stable
+        UPLOAD_MODE: release
+        ARCHIVE_NAME: pomo-tui-${{ github.ref_name }}-x86_64-linux-musl.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
