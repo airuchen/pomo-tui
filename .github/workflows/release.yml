@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  release:
-    types: [created]  # Also triggers when creating release via GitHub UI
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,12 +17,24 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build Release Binary
-      uses: rust-build/rust-build.action@v1.4.5
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
       with:
-        RUSTTARGET: x86_64-unknown-linux-musl
-        TOOLCHAIN_VERSION: stable
-        UPLOAD_MODE: release
-        ARCHIVE_NAME: pomo-tui-${{ github.ref_name }}-x86_64-linux-musl.tar.gz
+        toolchain: stable
+        target: x86_64-unknown-linux-musl
+        override: true
+
+    - name: Build Release Binary
+      run: |
+        cargo build --release --target x86_64-unknown-linux-musl
+        cd target/x86_64-unknown-linux-musl/release
+        tar -czf pomo-tui-${{ github.ref_name }}-x86_64-linux-musl.tar.gz pomo-tui
+        mv pomo-tui-${{ github.ref_name }}-x86_64-linux-musl.tar.gz ../../../
+
+    - name: Create Release and Upload
+      uses: softprops/action-gh-release@v1
+      with:
+        files: pomo-tui-${{ github.ref_name }}-x86_64-linux-musl.tar.gz
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
