@@ -108,6 +108,6 @@ I couldn’t find a simple Pomodoro TUI that matched what I had in mind. I was a
 
 ## TODO
 
-* [ ] Bring logging back from the dead
-* [ ] Waybar integration
+* [ ] Log the history
+* [ ] Allow to enter and show a TODO list
 * [ ] Docs for REST API
