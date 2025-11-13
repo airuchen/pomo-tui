@@ -154,10 +154,7 @@ impl KeyCommand {
 pub fn render_hint() -> Table<'static> {
     let rows: Vec<Row> = KeyCommand::ALL
         .iter()
-        .map(|cmd| Row::new([
-            Cell::from(cmd.key_display()),
-            Cell::from(cmd.description())
-        ]))
+        .map(|cmd| Row::new([Cell::from(cmd.key_display()), Cell::from(cmd.description())]))
         .collect();
 
     Table::new(rows, [Constraint::Length(10), Constraint::Fill(1)])
