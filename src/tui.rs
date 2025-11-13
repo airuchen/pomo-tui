@@ -16,7 +16,7 @@ use std::fmt;
 use crate::{
     client::PomoClient,
     timer::TimerStatus,
-    utils::{self, KeyCommand, centered_area, create_large_ascii_numbers, render_keymap},
+    utils::{self, KeyCommand, centered_area, create_large_ascii_numbers, render_hint},
 };
 
 const POPUP_WIDTH_PERCENT: u16 = 60;
@@ -207,7 +207,7 @@ impl ServerApp {
         let layout = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
         let [instructions, content] = area.layout(&layout);
 
-        frame.render_widget(Line::from("?: Keymap, q: Quit").centered(), instructions);
+        frame.render_widget(Line::from("?: Hint, q: Quit").centered(), instructions);
 
         frame.render_widget(self, content);
 
@@ -217,8 +217,8 @@ impl ServerApp {
             // clears out any background in the area before rendering the popup
             frame.render_widget(Clear, popup_area);
 
-            let keymap_table = render_keymap();
-            frame.render_widget(keymap_table, popup_area);
+            let hint_table = render_hint();
+            frame.render_widget(hint_table, popup_area);
         }
     }
 
@@ -226,6 +226,11 @@ impl ServerApp {
         match self.app_mode {
             // Normal mode - use efficient KeyCommand lookup
             AppMode::Normal => {
+                // Intuitively close the hint
+                if self.show_hint && key_event.code == KeyCode::Esc {
+                    self.show_hint = false;
+                    return Ok(());
+                }
                 if let Some(command) = KeyCommand::from_keycode(key_event.code) {
                     self.execute_command(command).await?
                 }
@@ -272,7 +277,7 @@ impl ServerApp {
     async fn execute_command(&mut self, command: KeyCommand) -> anyhow::Result<()> {
         match command {
             KeyCommand::Quit => self.exit(),
-            KeyCommand::ToggleKeymap => self.show_hint = !self.show_hint,
+            KeyCommand::ToggleHint => self.show_hint = !self.show_hint,
             KeyCommand::InputTask => self.app_mode = self.app_mode.toggle(),
             KeyCommand::Reset => {
                 self.pomo_client

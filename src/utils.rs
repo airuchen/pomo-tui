@@ -79,7 +79,7 @@ pub fn centered_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyCommand {
     Quit,
-    ToggleKeymap,
+    ToggleHint,
     InputTask,
     Reset,
     Toggle,
@@ -94,7 +94,7 @@ impl KeyCommand {
     pub const fn from_keycode(key: KeyCode) -> Option<Self> {
         match key {
             KeyCode::Char('q') => Some(Self::Quit),
-            KeyCode::Char('?') => Some(Self::ToggleKeymap),
+            KeyCode::Char('?') => Some(Self::ToggleHint),
             KeyCode::Char('i') => Some(Self::InputTask),
             KeyCode::Char('r') => Some(Self::Reset),
             KeyCode::Char(' ') => Some(Self::Toggle),
@@ -106,11 +106,9 @@ impl KeyCommand {
         }
     }
 
-    /// Returns the description for display in keymap table
+    /// Returns the description for display in hint table
     pub const fn description(self) -> &'static str {
         match self {
-            Self::Quit => "Quit",
-            Self::ToggleKeymap => "Toggle Keymap",
             Self::InputTask => "Input current task name",
             Self::Reset => "Reset timer",
             Self::Toggle => "Start/Pause",
@@ -118,14 +116,14 @@ impl KeyCommand {
             Self::SetLong => "Set Long session (50/10)[m]",
             Self::SetShort => "Set Short session (25/5)[m]",
             Self::SetTest => "Set Test session (5/5)[s]",
+            Self::ToggleHint => "Close Hint Page",
+            Self::Quit => "Quit",
         }
     }
 
-    /// Returns the key display string for keymap table
+    /// Returns the key display string for hint table
     pub const fn key_display(self) -> &'static str {
         match self {
-            Self::Quit => "q",
-            Self::ToggleKeymap => "?",
             Self::InputTask => "i",
             Self::Reset => "r",
             Self::Toggle => "Space",
@@ -133,13 +131,13 @@ impl KeyCommand {
             Self::SetLong => "+",
             Self::SetShort => "-",
             Self::SetTest => "`",
+            Self::ToggleHint => "?",
+            Self::Quit => "q",
         }
     }
 
     /// All available commands for iteration
     pub const ALL: &'static [Self] = &[
-        Self::Quit,
-        Self::ToggleKeymap,
         Self::InputTask,
         Self::Reset,
         Self::Toggle,
@@ -147,11 +145,13 @@ impl KeyCommand {
         Self::SetLong,
         Self::SetShort,
         Self::SetTest,
+        Self::ToggleHint,
+        Self::Quit,
     ];
 }
 
-/// Renders the keymap table using the type-safe KeyCommand enum
-pub fn render_keymap() -> Table<'static> {
+/// Renders the hint table using the type-safe KeyCommand enum
+pub fn render_hint() -> Table<'static> {
     let rows: Vec<Row> = KeyCommand::ALL
         .iter()
         .map(|cmd| Row::new([
@@ -161,6 +161,6 @@ pub fn render_keymap() -> Table<'static> {
         .collect();
 
     Table::new(rows, [Constraint::Length(10), Constraint::Fill(1)])
-        .block(Block::bordered().title("Keymap"))
+        .block(Block::bordered().title("Hint"))
         .flex(Flex::Center)
 }

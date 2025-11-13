@@ -6,9 +6,11 @@ A Rust-based Pomodoro TUI built on top of [Ratatui](https://github.com/ratatui/r
 <tr>
 <td><img src="./resources/work.png" width="260"/></td>
 <td><img src="./resources/break.png" width="260"/></td>
-<td><img src="./resources/keymap.png" width="260"/></td>
+<td><img src="./resources/hint.png" width="260"/></td>
 </tr>
 </table>
+
+[![Rust CI](https://github.com/airuchen/pomo-tui/actions/workflows/rust.yml/badge.svg)](https://github.com/airuchen/pomo-tui/actions/workflows/rust.yml)
 
 ### Design
 
