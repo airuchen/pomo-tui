@@ -1,4 +1,4 @@
-# Pomodoro TUI
+# Pomo-TUI
 
 ## Architecture Design
 * Layers-Architecture
@@ -67,9 +67,9 @@
 - [x] TUI
     - [x] ASCII number
     - [x] Hint
-- [ ] Server
-    - [ ] Architecture
-    - [ ] Async
+- [z] Server
+    - [x] Architecture
+    - [x] Async
 - [ ] Deliever
     - [ ] Wrap with Docker and default daemon
 - [ ] Clean code
