@@ -43,7 +43,7 @@ A Rust-based Pomodoro TUI built on top of [Ratatui](https://github.com/ratatui/r
 
 ### Installation
 
-##### Using Cargo
+##### A. Using Cargo
 
 ```bash
 git clone https://github.com/airuchen/pomo-tui.git
@@ -56,7 +56,8 @@ cargo run
 cargo install --path .
 ```
 
-##### Release Binary
+##### B. Release Binary
+
 1. Download from the [Releases page](https://github.com/airuchen/pomo-tui)
 2. Extract
     ```bash
@@ -81,25 +82,18 @@ This way, multiple terminals can share the same timer state without needing to t
 
 ### Modes
 
-* **Server Mode**
-Runs only the server, no UI.
+* **Embedded Mode**
+Runs the TUI and spawns a server if not running.
+
+```
+pomo-tui
+```
+
+* **Server Only**
+Runs only the server, a.k.a `pomo-no-tui`.
 
 ```
 pomo-tui --server
-```
-
-* **Embedded Mode (default if no server detected)**
-Runs both the server and the TUI.
-
-```
-pomo-tui
-```
-
-* **Client Mode (if server is detected)**
-Only runs the TUI and connects to the existing server.
-
-```
-pomo-tui
 ```
 
 >  You can override the default `127.0.0.1:1880` / `127.0.0.1:1881` using:
@@ -110,8 +104,7 @@ pomo-tui
 
 ### Back Story
 
-I couldn’t find a simple Pomodoro TUI on the internet that matched what I had in mind. So I took the chance to practice some Rust and turned it into a small side project.
-It’s not perfect — feel free to open issues or, even better, send a PR if something bothers you more than it bothers me.
+I couldn’t find a simple Pomodoro TUI that matched what I had in mind. I was also inspired by the minimal timer style from `tmux-clock`, so I took the chance to practice some Rust and turned it into a small side project. It’s not perfect — feel free to open issues or, even better, send a PR if something bothers you more than it bothers me.
 
 ## TODO
 
