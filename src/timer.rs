@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Yu-Wen Chen
+// Licensed under the MIT License (see LICENSE file)
+
 use chrono::{DateTime, Local};
 use notify_rust::Notification;
 use serde::{Deserialize, Serialize};

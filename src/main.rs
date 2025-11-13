@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Yu-Wen Chen
+// Licensed under the MIT License (see LICENSE file)
+
 mod client;
 mod logging;
 mod protocol;

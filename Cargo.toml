@@ -2,6 +2,10 @@
 name = "pomo-tui"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+authors = ["Yu-Wen Chen <real.yuwen@gmail.com>"]
+description = "A Pomodoro timer TUI application suits my taste"
+repository = "https://github.com/airuchen/pomo-tui"
 
 [dependencies]
 anyhow = "1.0.100"
