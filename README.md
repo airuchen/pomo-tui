@@ -57,7 +57,7 @@ cargo install --path .
 ```
 
 ##### Release Binary
-1. Download from the Releases page
+1. Download from the [Releases page](https://github.com/airuchen/pomo-tui)
 2. Extract
     ```bash
     tar -xzvf pomo-tui-<version>-x86_64-linux-musl.tar.gz
