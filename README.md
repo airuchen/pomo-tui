@@ -70,17 +70,6 @@ cargo install --path .
     pomo-tui
     ```
 
-### Usage
-
-`pomo-tui` can run as a **server**, a **client**, or both at once.
-
-If you just run `pomo-tui`, it will:
-
-1. Check if a server is already running.
-2. If yes → run in **client mode** and connect.
-3. If not → spawn a **server + client** (embedded mode).
-
-This way, multiple terminals can share the same timer state without needing to think about it too much.
 
 ### Modes
 
@@ -90,6 +79,7 @@ Runs the TUI and spawns a server if not running.
 ```
 pomo-tui
 ```
+> Multiple terminals can share the same timer state.
 
 * **Server Only**
 Runs only the server, a.k.a `pomo-no-tui`.
