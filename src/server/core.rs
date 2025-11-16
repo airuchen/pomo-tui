@@ -3,17 +3,30 @@
 
 use crate::protocol::{Request, Response};
 use crate::timer::Timer;
+use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::time::{Duration, interval};
 
 pub struct PomoServer {
-    timer: Mutex<Timer>,
+    timer: Arc<Mutex<Timer>>,
 }
 
 impl PomoServer {
     pub fn new() -> Self {
-        Self {
-            timer: Mutex::new(Timer::new()),
-        }
+        let timer = Arc::new(Mutex::new(Timer::new()));
+        let timer_clone = timer.clone();
+
+        // Start background update loop
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                let mut timer_guard = timer_clone.lock().await;
+                timer_guard.update();
+            }
+        });
+
+        Self { timer }
     }
 
     pub async fn process_request(&self, request: Request) -> Response {
