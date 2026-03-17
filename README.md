@@ -98,8 +98,22 @@ pomo-tui --server
 
 I couldn’t find a simple Pomodoro TUI that matched what I had in mind. I was also inspired by the minimal timer style from `tmux-clock`, so I took the chance to practice some Rust and turned it into a small side project. It’s not perfect — feel free to open issues or, even better, send a PR if something bothers you more than it bothers me.
 
+### TUI Keybindings
+
+| Key | Action |
+|-----|--------|
+| `Space` | Start / Pause |
+| `r` | Reset |
+| `s` | Switch Work ↔ Break |
+| `i` | Enter task name |
+| `+` | Long preset (50/10 min) |
+| `-` | Short preset (25/5 min) |
+| `` ` `` | Test preset (5/5 sec) |
+| `?` | Toggle hint overlay |
+| `q` | Quit |
+
 ## TODO
 
-* [ ] Log the history
-* [ ] Allow to enter and show a TODO list
-* [ ] Docs for REST API
+* [ ] Persist log events to a relational database (SQLite via sqlx)
+* [ ] History API endpoints (`GET /timer/history`)
+* [ ] Write Waybar state file on each tick
