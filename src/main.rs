@@ -91,11 +91,28 @@ async fn server_exists(tcp_addr: &str) -> bool {
 }
 
 async fn start_server(tcp_addr: &str, http_addr: &str) -> Result<()> {
-    let (tcp_server, http_server) = spawn_servers(tcp_addr, http_addr).await;
+    let (mut tcp_server, mut http_server) = spawn_servers(tcp_addr, http_addr).await;
 
-    tokio::signal::ctrl_c().await?;
+    // Wait until one server exits or we receive a shutdown signal.
+    tokio::select! {
+        r = &mut tcp_server => {
+            r??; // JoinError? then anyhow::Error?
+        }
+        r = &mut http_server => {
+            r??;
+        }
+        _ = tokio::signal::ctrl_c() => {
+            println!("Shutdown signal received");
+        }
+    }
+
+    // Stop both tasks (if still running).
     tcp_server.abort();
     http_server.abort();
+
+    // Optional: ensure abort is observed (avoid noisy "task was cancelled" later)
+    let _ = tcp_server.await;
+    let _ = http_server.await;
 
     Ok(())
 }
