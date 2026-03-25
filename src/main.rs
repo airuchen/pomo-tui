@@ -2,6 +2,7 @@
 // Licensed under the MIT License (see LICENSE file)
 
 mod client;
+mod db;
 mod logging;
 mod protocol;
 mod server;
@@ -16,6 +17,7 @@ use crate::server::tcp::TcpServer;
 use crate::tui::ServerApp;
 use anyhow::Result;
 use clap::Parser;
+use sqlx::SqlitePool;
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
@@ -35,13 +37,14 @@ struct Args {
 async fn spawn_servers(
     tcp_addr: &str,
     http_addr: &str,
+    pool: SqlitePool,
 ) -> (
     tokio::task::JoinHandle<Result<()>>,
     tokio::task::JoinHandle<Result<()>>,
 ) {
-    let pomo_server = Arc::new(PomoServer::new());
+    let pomo_server = Arc::new(PomoServer::new(pool.clone()));
     let tcp_server = TcpServer::new(pomo_server.clone());
-    let http_server = HttpServer::new(pomo_server);
+    let http_server = HttpServer::new(pomo_server, pool);
 
     let tcp_addr = tcp_addr.to_string();
     let http_addr = http_addr.to_string();
@@ -63,8 +66,12 @@ async fn start_network_tui(tcp_addr: &str) -> Result<()> {
     Ok(())
 }
 
-async fn start_embedded_server_and_tui(tcp_addr: &str, http_addr: &str) -> Result<()> {
-    let (tcp_server, http_server) = spawn_servers(tcp_addr, http_addr).await;
+async fn start_embedded_server_and_tui(
+    tcp_addr: &str,
+    http_addr: &str,
+    pool: SqlitePool,
+) -> Result<()> {
+    let (tcp_server, http_server) = spawn_servers(tcp_addr, http_addr, pool).await;
 
     // Give servers time to start
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -90,8 +97,8 @@ async fn server_exists(tcp_addr: &str) -> bool {
     }
 }
 
-async fn start_server(tcp_addr: &str, http_addr: &str) -> Result<()> {
-    let (mut tcp_server, mut http_server) = spawn_servers(tcp_addr, http_addr).await;
+async fn start_server(tcp_addr: &str, http_addr: &str, pool: SqlitePool) -> Result<()> {
+    let (mut tcp_server, mut http_server) = spawn_servers(tcp_addr, http_addr, pool).await;
 
     // Wait until one server exits or we receive a shutdown signal.
     tokio::select! {
@@ -121,16 +128,23 @@ async fn start_server(tcp_addr: &str, http_addr: &str) -> Result<()> {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
+    let db_path = dirs::data_local_dir()
+        .map(|p| p.join("pomo-tui/pomo.db"))
+        .or_else(|| dirs::home_dir().map(|p| p.join(".pomo-tui/pomo.db")))
+        .ok_or_else(|| anyhow::anyhow!("Cannot determine data directory"))?;
+
+    let pool = db::init(&db_path).await?;
+
     if args.server {
         println!("Starting Pomo server");
-        start_server(&args.tcp_addr, &args.http_addr).await
+        start_server(&args.tcp_addr, &args.http_addr, pool).await
     } else {
         if server_exists(&args.tcp_addr).await {
             println!("Connecting to existing server ...");
             start_network_tui(&args.tcp_addr).await
         } else {
             println!("Starting embedded server and TUI");
-            start_embedded_server_and_tui(&args.tcp_addr, &args.http_addr).await
+            start_embedded_server_and_tui(&args.tcp_addr, &args.http_addr, pool).await
         }
     }
 }

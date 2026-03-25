@@ -4,29 +4,40 @@
 use anyhow::Result;
 use axum::{
     Router,
-    extract::State,
+    extract::{Query, State},
+    http::StatusCode,
     response::Json,
     routing::{get, post, put},
 };
+use serde::Deserialize;
 use serde_json::{Value, json};
+use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
 use crate::{
+    db,
     protocol::messages::{SetPresetRequest, SetTaskRequest},
     server::core::PomoServer,
 };
 
+#[derive(Clone)]
+pub struct AppState {
+    pub server: Arc<PomoServer>,
+    pub pool: SqlitePool,
+}
+
 pub struct HttpServer {
-    server: Arc<PomoServer>,
+    state: AppState,
 }
 
 impl HttpServer {
-    pub fn new(server: Arc<PomoServer>) -> Self {
-        Self { server }
+    pub fn new(server: Arc<PomoServer>, pool: SqlitePool) -> Self {
+        Self {
+            state: AppState { server, pool },
+        }
     }
 
-    // TODO: how to warn if we call wrongly?
     pub async fn start(&self, addr: &str) -> Result<()> {
         let app = Router::new()
             .route("/ping", get(ping_handler))
@@ -38,79 +49,209 @@ impl HttpServer {
             .route("/timer/switch", post(switch_mode_timer_handler))
             .route("/timer/task", put(set_task_handler))
             .route("/timer/preset", put(set_preset_handler))
-            .with_state(self.server.clone());
+            .route("/timer/history", get(get_history_handler))
+            .with_state(self.state.clone());
 
         let listener = TcpListener::bind(addr).await?;
         eprintln!("HttpServer listening on {}", addr);
-
         axum::serve(listener, app).await?;
         Ok(())
     }
 }
 
-async fn ping_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    server.process_request(crate::protocol::Request::Ping).await;
+async fn ping_handler(State(state): State<AppState>) -> Json<Value> {
+    state
+        .server
+        .process_request(crate::protocol::Request::Ping)
+        .await;
     Json(json!({"message": "pong"}))
 }
 
-async fn get_status_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    let response = server
+async fn get_status_handler(State(state): State<AppState>) -> Json<Value> {
+    let response = state
+        .server
         .process_request(crate::protocol::Request::GetStatus)
         .await;
     Json(serde_json::to_value(response).unwrap())
 }
 
-async fn start_timer_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    server
+async fn start_timer_handler(State(state): State<AppState>) -> Json<Value> {
+    state
+        .server
         .process_request(crate::protocol::Request::Start)
         .await;
     Json(json!({"success": true}))
 }
 
-async fn pause_timer_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    server
+async fn pause_timer_handler(State(state): State<AppState>) -> Json<Value> {
+    state
+        .server
         .process_request(crate::protocol::Request::Pause)
         .await;
     Json(json!({"success": true}))
 }
 
-async fn resume_timer_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    server
+async fn resume_timer_handler(State(state): State<AppState>) -> Json<Value> {
+    state
+        .server
         .process_request(crate::protocol::Request::Resume)
         .await;
     Json(json!({"success": true}))
 }
 
-async fn reset_timer_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    server
+async fn reset_timer_handler(State(state): State<AppState>) -> Json<Value> {
+    state
+        .server
         .process_request(crate::protocol::Request::Reset)
         .await;
     Json(json!({"success": true}))
 }
 
-async fn switch_mode_timer_handler(State(server): State<Arc<PomoServer>>) -> Json<Value> {
-    server
+async fn switch_mode_timer_handler(State(state): State<AppState>) -> Json<Value> {
+    state
+        .server
         .process_request(crate::protocol::Request::SwitchMode)
         .await;
     Json(json!({"success": true}))
 }
 
 async fn set_task_handler(
-    State(server): State<Arc<PomoServer>>,
+    State(state): State<AppState>,
     Json(req): Json<SetTaskRequest>,
 ) -> Json<Value> {
-    server
+    state
+        .server
         .process_request(crate::protocol::Request::SetTask(req.task))
         .await;
     Json(json!({"success": true}))
 }
 
 async fn set_preset_handler(
-    State(server): State<Arc<PomoServer>>,
+    State(state): State<AppState>,
     Json(req): Json<SetPresetRequest>,
 ) -> Json<Value> {
-    server
+    state
+        .server
         .process_request(crate::protocol::Request::SetPreset(req.preset))
         .await;
     Json(json!({"success": true}))
+}
+
+#[derive(Deserialize)]
+struct HistoryQuery {
+    limit: Option<u32>,
+}
+
+async fn get_history_handler(
+    State(state): State<AppState>,
+    Query(params): Query<HistoryQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let limit = params.limit.unwrap_or(20);
+    match db::events::get_sessions(&state.pool, limit).await {
+        Ok(sessions) => Ok(Json(serde_json::to_value(sessions).unwrap())),
+        Err(e) => {
+            log::error!("History query failed: {e}");
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timer::{LogEvent, TimerMode};
+    use axum::{body::Body, http::Request};
+    use chrono::Local;
+    use sqlx::pool::PoolOptions;
+    use tower::ServiceExt;
+    use uuid::Uuid;
+
+    async fn test_app() -> (Router, SqlitePool) {
+        let pool = PoolOptions::<sqlx::Sqlite>::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let server = Arc::new(PomoServer::new(pool.clone()));
+        let state = AppState {
+            server,
+            pool: pool.clone(),
+        };
+        let app = Router::new()
+            .route("/timer/history", get(get_history_handler))
+            .with_state(state);
+        (app, pool)
+    }
+
+    #[tokio::test]
+    async fn test_history_empty() {
+        let (app, _pool) = test_app().await;
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/timer/history")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let sessions: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+        assert!(sessions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_history_returns_session() {
+        let (app, pool) = test_app().await;
+        let id = Uuid::new_v4();
+        crate::db::events::insert_event(
+            &pool,
+            &LogEvent::Started {
+                id,
+                timer_type: TimerMode::Work,
+                task: "test".into(),
+                at: Local::now(),
+                remaining: 1500,
+            },
+        )
+        .await
+        .unwrap();
+        crate::db::events::insert_event(
+            &pool,
+            &LogEvent::Completed {
+                id,
+                task: "test".into(),
+                at: Local::now(),
+                work_secs: 1500,
+            },
+        )
+        .await
+        .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/timer/history?limit=5")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let sessions: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["timer_type"], "Work");
+        assert_eq!(sessions[0]["task"], "test");
+        assert_eq!(sessions[0]["final_event"], "Completed");
+    }
 }

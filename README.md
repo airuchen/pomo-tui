@@ -112,8 +112,55 @@ I couldn’t find a simple Pomodoro TUI that matched what I had in mind. I was a
 | `?` | Toggle hint overlay |
 | `q` | Quit |
 
+### Session History
+
+Timer events are persisted to a local SQLite database at:
+
+```
+~/.local/share/pomo-tui/pomo.db
+```
+
+#### HTTP API
+
+```bash
+# Last 20 sessions (default)
+curl http://127.0.0.1:1881/timer/history
+
+# Last N sessions (max 100)
+curl http://127.0.0.1:1881/timer/history?limit=10
+```
+
+Each session in the response includes:
+
+| Field | Description |
+|-------|-------------|
+| `session_id` | UUID for the timer session |
+| `timer_type` | `"Work"` or `"Break"` |
+| `task` | Task name set at start |
+| `started_at` | ISO 8601 timestamp |
+| `ended_at` | ISO 8601 timestamp |
+| `work_secs` | Seconds elapsed |
+| `final_event` | Last event: `Started`, `Paused`, `Completed`, `Terminated` |
+
+#### Direct SQLite access
+
+```bash
+sqlite3 ~/.local/share/pomo-tui/pomo.db
+
+-- All sessions, newest first
+SELECT * FROM sessions ORDER BY started_at DESC LIMIT 20;
+
+-- Completed work sessions only
+SELECT session_id, task, work_secs, started_at
+FROM sessions
+WHERE timer_type = 'Work' AND final_event = 'Completed'
+ORDER BY started_at DESC;
+
+-- Raw events for a specific session
+SELECT event_type, at, remaining_secs FROM events
+WHERE session_id = '<uuid>' ORDER BY at;
+```
+
 ## TODO
 
-* [ ] Persist log events to a relational database (SQLite via sqlx)
-* [ ] History API endpoints (`GET /timer/history`)
 * [ ] Write Waybar state file on each tick
