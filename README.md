@@ -207,6 +207,12 @@ JOIN sessions s ON ts.session_id = s.session_id
 WHERE ts.todo_id = '<todo-uuid>' AND s.final_event = 'Completed';
 ```
 
-## TODO
+## Documentation
 
-* [ ] Write Waybar state file on each tick
+| Doc | Description |
+|-----|-------------|
+| [API Reference](docs/API_COMMANDS.md) | Full HTTP and TCP API — endpoints, request/response shapes, curl examples |
+| [Architecture Design](docs/Design.md) | Overall architecture decisions and rationale |
+| [TCP Server Design](docs/DESIGN_TCP_SERVER.md) | TCP server internals and protocol design |
+| [Todo Feature Design](docs/todo-feature-design.md) | Design notes for the todo list feature |
+| [Web Dashboard Design](docs/web-dashboard-and-changetask.md) | Design notes for the web dashboard and ChangeTask |
