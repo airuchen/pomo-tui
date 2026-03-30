@@ -100,17 +100,40 @@ I couldn’t find a simple Pomodoro TUI that matched what I had in mind. I was a
 
 ### TUI Keybindings
 
+#### Normal Mode
+
 | Key | Action |
 |-----|--------|
 | `Space` | Start / Pause |
 | `r` | Reset |
 | `s` | Switch Work ↔ Break |
 | `i` | Enter task name |
+| `t` | Open todo list |
 | `+` | Long preset (50/10 min) |
 | `-` | Short preset (25/5 min) |
 | `` ` `` | Test preset (5/5 sec) |
 | `?` | Toggle hint overlay |
 | `q` | Quit |
+
+#### Todo Mode
+
+Press `t` to open the todo list. Todos are hierarchical (org-mode style), persisted in SQLite, and can be linked to pomodoro sessions.
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move cursor down |
+| `k` / `↑` | Move cursor up |
+| `l` / `→` | Expand children |
+| `h` / `←` | Collapse children |
+| `a` | Add sibling todo |
+| `A` | Add child todo |
+| `e` | Edit title |
+| `x` | Toggle done |
+| `d` | Delete todo |
+| `Enter` | Select as current task (auto-links future sessions) |
+| `Esc` / `t` | Close todo list |
+
+**Session linking:** When you select a todo with `Enter`, it becomes the active task. Any pomodoro session that completes while this todo is active is automatically linked to it. The `[Np]` suffix in the todo list shows how many sessions have been linked.
 
 ### Session History
 
@@ -159,6 +182,29 @@ ORDER BY started_at DESC;
 -- Raw events for a specific session
 SELECT event_type, at, remaining_secs FROM events
 WHERE session_id = '<uuid>' ORDER BY at;
+```
+
+### Todo List
+
+The built-in todo list stores tasks in the same SQLite database alongside session history:
+
+```bash
+sqlite3 ~/.local/share/pomo-tui/pomo.db
+
+-- All todos
+SELECT id, parent_id, title, done FROM todos ORDER BY sort_order;
+
+-- Sessions linked to a specific todo
+SELECT ts.session_id, s.started_at, s.work_secs, s.final_event
+FROM todo_sessions ts
+JOIN sessions s ON ts.session_id = s.session_id
+WHERE ts.todo_id = '<todo-uuid>';
+
+-- Total time spent on a todo
+SELECT SUM(s.work_secs) as total_secs
+FROM todo_sessions ts
+JOIN sessions s ON ts.session_id = s.session_id
+WHERE ts.todo_id = '<todo-uuid>' AND s.final_event = 'Completed';
 ```
 
 ## TODO

@@ -7,6 +7,7 @@ use sqlx::{
 use std::{path::Path, time::Duration};
 
 pub mod events;
+pub mod todos;
 
 pub async fn init(path: &Path) -> Result<SqlitePool> {
     if let Some(parent) = path.parent() {

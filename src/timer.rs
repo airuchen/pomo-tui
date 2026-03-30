@@ -355,6 +355,32 @@ impl Timer {
         self.task_name = new_task_name.into();
     }
 
+    /// Change task name mid-session: terminates current session and starts a new one
+    /// with the remaining time. If idle/paused, just updates the name.
+    pub fn change_task(&mut self, new_task_name: &str) {
+        if self.is_running() && !self.is_paused() && self.id.is_some() {
+            // Terminate current session
+            self.persist_termination();
+            // Snapshot remaining time before resetting started_at
+            if let Some(t0) = self.started_at.take() {
+                self.remaining = self.remaining.saturating_sub(t0.elapsed());
+            }
+            // Update name and start fresh session with remaining time
+            self.task_name = new_task_name.into();
+            self.id = Some(Uuid::new_v4());
+            self.started_at = Some(Instant::now());
+            self.emit(LogEvent::Started {
+                id: self.current_id(),
+                timer_type: self.mode,
+                task: self.task_name.clone(),
+                at: Local::now(),
+                remaining: self.remaining.as_secs(),
+            });
+        } else {
+            self.task_name = new_task_name.into();
+        }
+    }
+
     pub fn set_preset(&mut self, p: Preset) {
         if self.timeset == p {
             log::info!("Already using {:?} preset.", p);

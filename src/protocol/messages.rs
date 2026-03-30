@@ -13,6 +13,7 @@ pub enum Request {
     Reset,
     SwitchMode,
     SetTask(String),
+    ChangeTask(String),
     SetPreset(Preset),
     Ping,
 }

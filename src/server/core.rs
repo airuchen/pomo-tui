@@ -62,6 +62,10 @@ impl PomoServer {
                 timer.set_task_name(&name);
                 Response::Ok
             }
+            Request::ChangeTask(name) => {
+                timer.change_task(&name);
+                Response::Ok
+            }
             Request::GetStatus => Response::Status(timer.get_timer_status()),
             Request::SetPreset(preset) => {
                 timer.set_preset(preset);

@@ -7,6 +7,7 @@ mod logging;
 mod protocol;
 mod server;
 mod timer;
+mod todo;
 mod tui;
 mod utils;
 
@@ -54,12 +55,12 @@ async fn spawn_servers(
     (tcp_task, http_task)
 }
 
-async fn start_network_tui(tcp_addr: &str) -> Result<()> {
+async fn start_network_tui(tcp_addr: &str, pool: SqlitePool) -> Result<()> {
     let mut client = PomoClient::new();
     client.connect(tcp_addr).await?;
 
     let mut terminal = ratatui::init();
-    let mut app = ServerApp::new(client);
+    let mut app = ServerApp::new(client, Some(pool));
     app.run(&mut terminal).await?;
     ratatui::restore();
 
@@ -71,7 +72,7 @@ async fn start_embedded_server_and_tui(
     http_addr: &str,
     pool: SqlitePool,
 ) -> Result<()> {
-    let (tcp_server, http_server) = spawn_servers(tcp_addr, http_addr, pool).await;
+    let (tcp_server, http_server) = spawn_servers(tcp_addr, http_addr, pool.clone()).await;
 
     // Give servers time to start
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -80,7 +81,7 @@ async fn start_embedded_server_and_tui(
     client.connect(tcp_addr).await?;
 
     let mut terminal = ratatui::init();
-    let mut app = ServerApp::new(client);
+    let mut app = ServerApp::new(client, Some(pool.clone()));
     let _ = app.run(&mut terminal).await;
 
     ratatui::restore();
@@ -141,7 +142,7 @@ async fn main() -> Result<()> {
     } else {
         if server_exists(&args.tcp_addr).await {
             println!("Connecting to existing server ...");
-            start_network_tui(&args.tcp_addr).await
+            start_network_tui(&args.tcp_addr, pool).await
         } else {
             println!("Starting embedded server and TUI");
             start_embedded_server_and_tui(&args.tcp_addr, &args.http_addr, pool).await

@@ -87,6 +87,7 @@ pub enum KeyCommand {
     SetLong,
     SetShort,
     SetTest,
+    OpenTodo,
 }
 
 impl KeyCommand {
@@ -102,6 +103,7 @@ impl KeyCommand {
             KeyCode::Char('+') => Some(Self::SetLong),
             KeyCode::Char('-') => Some(Self::SetShort),
             KeyCode::Char('`') => Some(Self::SetTest),
+            KeyCode::Char('t') => Some(Self::OpenTodo),
             _ => None,
         }
     }
@@ -116,6 +118,7 @@ impl KeyCommand {
             Self::SetLong => "Set Long session (50/10)[m]",
             Self::SetShort => "Set Short session (25/5)[m]",
             Self::SetTest => "Set Test session (5/5)[s]",
+            Self::OpenTodo => "Open todo list",
             Self::ToggleHint => "Close Hint Page",
             Self::Quit => "Quit",
         }
@@ -131,6 +134,7 @@ impl KeyCommand {
             Self::SetLong => "+",
             Self::SetShort => "-",
             Self::SetTest => "`",
+            Self::OpenTodo => "t",
             Self::ToggleHint => "?",
             Self::Quit => "q",
         }
@@ -145,6 +149,7 @@ impl KeyCommand {
         Self::SetLong,
         Self::SetShort,
         Self::SetTest,
+        Self::OpenTodo,
         Self::ToggleHint,
         Self::Quit,
     ];
