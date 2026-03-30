@@ -100,20 +100,113 @@ I couldn’t find a simple Pomodoro TUI that matched what I had in mind. I was a
 
 ### TUI Keybindings
 
+#### Normal Mode
+
 | Key | Action |
 |-----|--------|
 | `Space` | Start / Pause |
 | `r` | Reset |
 | `s` | Switch Work ↔ Break |
 | `i` | Enter task name |
+| `t` | Open todo list |
 | `+` | Long preset (50/10 min) |
 | `-` | Short preset (25/5 min) |
 | `` ` `` | Test preset (5/5 sec) |
 | `?` | Toggle hint overlay |
 | `q` | Quit |
 
+#### Todo Mode
+
+Press `t` to open the todo list. Todos are hierarchical (org-mode style), persisted in SQLite, and can be linked to pomodoro sessions.
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move cursor down |
+| `k` / `↑` | Move cursor up |
+| `l` / `→` | Expand children |
+| `h` / `←` | Collapse children |
+| `a` | Add sibling todo |
+| `A` | Add child todo |
+| `e` | Edit title |
+| `x` | Toggle done |
+| `d` | Delete todo |
+| `Enter` | Select as current task (auto-links future sessions) |
+| `Esc` / `t` | Close todo list |
+
+**Session linking:** When you select a todo with `Enter`, it becomes the active task. Any pomodoro session that completes while this todo is active is automatically linked to it. The `[Np]` suffix in the todo list shows how many sessions have been linked.
+
+### Session History
+
+Timer events are persisted to a local SQLite database at:
+
+```
+~/.local/share/pomo-tui/pomo.db
+```
+
+#### HTTP API
+
+```bash
+# Last 20 sessions (default)
+curl http://127.0.0.1:1881/timer/history
+
+# Last N sessions (max 100)
+curl http://127.0.0.1:1881/timer/history?limit=10
+```
+
+Each session in the response includes:
+
+| Field | Description |
+|-------|-------------|
+| `session_id` | UUID for the timer session |
+| `timer_type` | `"Work"` or `"Break"` |
+| `task` | Task name set at start |
+| `started_at` | ISO 8601 timestamp |
+| `ended_at` | ISO 8601 timestamp |
+| `work_secs` | Seconds elapsed |
+| `final_event` | Last event: `Started`, `Paused`, `Completed`, `Terminated` |
+
+#### Direct SQLite access
+
+```bash
+sqlite3 ~/.local/share/pomo-tui/pomo.db
+
+-- All sessions, newest first
+SELECT * FROM sessions ORDER BY started_at DESC LIMIT 20;
+
+-- Completed work sessions only
+SELECT session_id, task, work_secs, started_at
+FROM sessions
+WHERE timer_type = 'Work' AND final_event = 'Completed'
+ORDER BY started_at DESC;
+
+-- Raw events for a specific session
+SELECT event_type, at, remaining_secs FROM events
+WHERE session_id = '<uuid>' ORDER BY at;
+```
+
+### Todo List
+
+The built-in todo list stores tasks in the same SQLite database alongside session history:
+
+```bash
+sqlite3 ~/.local/share/pomo-tui/pomo.db
+
+-- All todos
+SELECT id, parent_id, title, done FROM todos ORDER BY sort_order;
+
+-- Sessions linked to a specific todo
+SELECT ts.session_id, s.started_at, s.work_secs, s.final_event
+FROM todo_sessions ts
+JOIN sessions s ON ts.session_id = s.session_id
+WHERE ts.todo_id = '<todo-uuid>';
+
+-- Total time spent on a todo
+SELECT SUM(s.work_secs) as total_secs
+FROM todo_sessions ts
+JOIN sessions s ON ts.session_id = s.session_id
+WHERE ts.todo_id = '<todo-uuid>' AND s.final_event = 'Completed';
+```
+
 ## TODO
 
-* [ ] Persist log events to a relational database (SQLite via sqlx)
-* [ ] History API endpoints (`GET /timer/history`)
 * [ ] Write Waybar state file on each tick

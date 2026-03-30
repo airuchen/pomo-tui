@@ -74,6 +74,11 @@ impl PomoClient {
         Ok(())
     }
 
+    pub async fn change_task_name(&mut self, task_name: String) -> Result<()> {
+        self.send_request(Request::ChangeTask(task_name)).await?;
+        Ok(())
+    }
+
     pub async fn reset(&mut self) -> Result<()> {
         self.send_request(Request::Reset).await?;
         Ok(())
